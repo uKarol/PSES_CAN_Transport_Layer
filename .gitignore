@@ -42,6 +42,11 @@
 *.idb
 *.pdb
 
+# All generated files 
+*.gcov
+*.gcda
+*.gcno
+
 # Kernel Module Compile Results
 *.mod*
 *.cmd
