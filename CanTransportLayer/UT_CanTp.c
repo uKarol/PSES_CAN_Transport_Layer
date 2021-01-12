@@ -8,6 +8,7 @@
 #include "Std_Types.h"
 
 #include "CanTp.c"  
+#include <stdio.h>
 
 /**
   @brief Test dodawania
@@ -128,11 +129,91 @@ void Test_Of_CanTp_FrameCheckType(void)
     TEST_CHECK(retv == E_NOT_OK);
 }
 
+
+void Test_Of_CanTp_PrepareSegmenetedFrame(void)
+{
+  Std_ReturnType retv;
+  CanPCI_Type CanPCI;
+  PduInfoType CanPDU;
+  
+  uint8_t Can_payload[7];
+  uint8_t sdu_data[8];
+
+  static const uint8_t Can_payload_example[] = {0x00, 0xFF, 0x01, 0xFE, 0x02, 0x03, 0x04};
+  static const uint8_t Can_payload_example_short[] = {0x00, 0xFF};
+
+
+  CanPDU.SduDataPtr = sdu_data;
+
+
+  //Signle frame, lenght = 7
+  CanPCI.frame_type = SF;
+  CanPCI.frame_lenght;
+  memcpy(Can_payload, Can_payload_example, sizeof(Can_payload_example));
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_OK);
+  TEST_CHECK(CanPDU.SduDataPtr[0] == (SF_ID << 4) | sizeof(Can_payload_example));
+  TEST_CHECK(memcmp(Can_payload_example, CanPDU.SduDataPtr+1, sizeof(Can_payload_example)));
+
+  //Signle frame, lenght = short
+  CanPCI.frame_type = SF;
+  CanPCI.frame_lenght;
+  memcpy(Can_payload, Can_payload_example_short, sizeof(Can_payload_example_short));
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_OK);
+  TEST_CHECK(CanPDU.SduDataPtr[0] == (SF_ID << 4) | sizeof(Can_payload_example_short));
+  TEST_CHECK(memcmp(Can_payload_example, CanPDU.SduDataPtr+1, sizeof(Can_payload_example_short)));
+
+  //Signle frame, lenght >= 8
+  CanPCI.frame_type = SF;
+  CanPCI.frame_lenght = 8;
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_NOT_OK);
+  TEST_CHECK(CanPDU.SduDataPtr[0] << 4 == (SF_ID << 4));
+
+  //Consecutive frame, SN = 0; 
+  CanPCI.frame_type = CF;
+  CanPCI.SN = 0;
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_OK);
+  TEST_CHECK(CanPDU.SduDataPtr[0] == (CF_ID << 4) | CanPCI.SN));
+
+  //Consecutive frame, SN != 0; 
+  CanPCI.frame_type = CF;
+  CanPCI.SN = 1;
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_OK);
+  TEST_CHECK(CanPDU.SduDataPtr[0] == (CF_ID << 4) | CanPCI.SN));
+
+  //FirstFrame
+  CanPCI.frame_type = FF;
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_NOT_OK);
+  
+  //FlowControl
+  CanPCI.frame_type = FC;
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_NOT_OK);
+
+  //Payload is NULL:
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, NULL);
+  TEST_CHECK(retv == E_NOT_OK);
+
+  //PCI is NULL:
+  retv = CanTp_PrepareSegmenetedFrame(NULL, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_NOT_OK);
+
+  //PDU is NULL:
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, NULL, Can_payload);
+  TEST_CHECK(retv == E_NOT_OK);
+}
+
 /*
   Lista testów - wpisz tutaj wszystkie funkcje które mają być wykonane jako testy.
 */
 TEST_LIST = {
-    { "Test_Of_CanTp_FrameCheckType", Test_Of_CanTp_FrameCheckType },   /* Format to { "nazwa testu", nazwa_funkcji } */
+    //{ "Test_Of_CanTp_FrameCheckType", Test_Of_CanTp_FrameCheckType },   /* Format to { "nazwa testu", nazwa_funkcji } */
+    { "Test_Of_CanTp_PrepareSegmenetedFrame", Test_Of_CanTp_PrepareSegmenetedFrame },
    // { "Test of Lib_Calc_Sub", Test_Of_Lib_Calc_Sub },
     { NULL, NULL }                                      /* To musi być na końcu */
 };

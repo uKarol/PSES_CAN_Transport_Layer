@@ -284,7 +284,7 @@ static Std_ReturnType CanTp_GetPCI(PduInfoType* can_data, CanPCI_Type* CanFrameI
     return ret;
 }
 
-static Std_ReturnType Can_Tp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload){
+Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload){
 
     /* TODO
         Przygotować funkcję i napisać do niej UT
@@ -303,4 +303,45 @@ static Std_ReturnType Can_Tp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfo
 
     */
 
+    Std_ReturnType ret = E_OK;
+
+    //Init CanPdu_Info if wrong frame type ? 
+
+    
+
+
+    if( NE_NULL_PTR(CanPCI) && NE_NULL_PTR(CanPdu_Info) && NE_NULL_PTR(Can_payload) ){
+        ret = E_NOT_OK;
+    }
+    else{
+
+        switch(CanPCI->frame_type){
+            case SF:
+                *(CanPdu_Info->SduDataPtr) = 0;
+                *(CanPdu_Info->SduDataPtr) = SF_ID << 4;
+        
+                if(CanPCI->frame_lenght <= 7){
+                    *(CanPdu_Info->SduDataPtr) = 0x0F | CanPCI->frame_lenght;
+                    for(uint8_t i = 0; i < CanPCI->frame_lenght; i++){
+                        *(CanPdu_Info->SduDataPtr + (i + 1)) = *(Can_payload + i);
+                    }  
+                }
+                else{
+                    ret = E_NOT_OK; //Za duża ilość danych
+                }
+            break;
+            case CF: 
+                *(CanPdu_Info->SduDataPtr) = 0;
+                *(CanPdu_Info->SduDataPtr) = CF_ID << 4;
+                *(CanPdu_Info->SduDataPtr) |= (0x0F & CanPCI->SN);
+            break;
+            case FF:
+            case FC:
+            default:
+                ret = E_NOT_OK;
+            break;
+        }
+    }
+
+    return ret;
 }
