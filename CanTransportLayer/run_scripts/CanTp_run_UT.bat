@@ -8,4 +8,5 @@ cd bins
 UT_CanTp.exe
 cd ..
 gcov UT_CanTp.c
+python -m gcovr -r . --html --html-details -o coverage.html
 pause

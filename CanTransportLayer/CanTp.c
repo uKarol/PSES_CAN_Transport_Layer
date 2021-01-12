@@ -17,6 +17,15 @@
 /*====================================================================================================================*\
     Makra lokalne
 \*====================================================================================================================*/
+#define NE_NULL_PTR( ptr ) (ptr != NULL)
+
+//#define GET_PCI_ID(  )
+
+#define SF_ID 0x0 // single frame
+#define FF_ID 0x1 // first frame
+#define CF_ID 0x2 // consecutive frame
+#define FC_ID 0x3 // flow control frame
+
 
 /*====================================================================================================================*\
     Typy lokalne
@@ -36,15 +45,16 @@ typedef enum {
     CANTP_TX_PROCESSING
 } CanTpTxState_Type;
 
-typedef enum {SF = 0, FF = 1, CF = 2, FC = 3} frame_type_t;
+typedef enum {SF = 0, FF = 1, CF = 2, FC = 3, UNKNOWN = 4} frame_type_t;
 
 typedef struct{
     frame_type_t frame_type;
-    uint32 frame_lenght;
-    uint8 BS;
-    uint8 FS;
-    uint8 ST;
-} CanFrameInfo_Type;
+    uint32 frame_lenght; 
+    uint8 SN; // Sequence Nubmer - only consecutive frame
+    uint8 BS; // Block Size - only flow control frame 
+    uint8 FS; // Flow Status -only flow control frame 
+    uint8 ST; // Sepsration Time - only flow control frame
+} CanPCI_Type;
 
 /*====================================================================================================================*\
     Zmienne globalne
@@ -67,77 +77,189 @@ static CanTpState_Type CanTpState;
 \*====================================================================================================================*/
 
 /**
-  @brief Can Initialisation 
+  @brief CanTp_Init
 
   This function initializes the CanTp module.  
 
-  Parameters (in) CfgPtr Pointer to the CanTp post-build configuration data.
+  Parameters (in) 
+        CfgPtr - Pointer to the CanTp post-build configuration data.
+
+  Parameters (inout): None
+
+  Parameters (out): None
+
   Return value None
 
-  Element projektu: [P2]
 */
 void CanTp_Init ( const CanTp_ConfigType* CfgPtr );
 
+
+/**
+  @brief CanTp_ GetVersionInfo
+
+  This function returns the version information of the CanTp module. 
+
+  Parameters (in) 
+        versioninfo - Indicator as to where to store the version information of this module.
+
+  Parameters (inout): None
+
+  Parameters (out): None
+
+  Return value None
+
+*/
 void CanTp_GetVersionInfo ( Std_VersionInfoType* versioninfo );
 
+/**
+  @brief CanTp_Shutdown
+
+  This function is called to shutdown the CanTp module. 
+
+  Parameters (in): None
+
+  Parameters (inout): None
+
+  Parameters (out): None
+
+  Return value None
+
+*/
 void CanTp_Shutdown ( void );
 
+/**
+  @brief CanTp_Transmit
+
+  Requests transmission of a PDU.
+
+  Parameters (in): 
+  TxPduId - Identifier of the PDU to be transmitted
+  PduInfoPtr - Length of and pointer to the PDU data and pointer to MetaData.
+
+  Parameters (inout): None
+
+  Parameters (out): None
+
+  Return value: Std_ReturnType
+    E_OK: Transmit request has been accepted. 
+    E_NOT_OK: Transmit request has not been accepted.
+
+*/
 Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr );
 
+/**
+  @brief CanTp_CancelReceive
+
+  Requests cancellation of an ongoing reception of a PDU in a lower layer transport protocol module.
+  Parameters (in): 
+   TxPduId - Identification of the PDU to be cancelled.
+
+  Parameters (inout): None
+
+  Parameters (out): None
+
+  Return value: Std_ReturnType
+    E_OK: Cancellation was executed successfully by the destination module. 
+    E_NOT_OK: Cancellation was rejected by the destination module.
+
+*/
 Std_ReturnType CanTp_CancelTransmit ( PduIdType TxPduId );
 
+/**
+  @brief CanTp_CancelReceive
+
+Requests cancellation of an ongoing reception of a PDU in a lower layer transport protocol module.  Parameters (in): 
+   RxPduId - Identification of the PDU to be cancelled.
+
+  Parameters (inout): None
+
+  Parameters (out): None
+
+  Return value: Std_ReturnType
+    E_OK: Cancellation was executed successfully by the destination module. 
+    E_NOT_OK: Cancellation was rejected by the destination module.
+
+*/
 Std_ReturnType CanTp_CancelReceive ( PduIdType RxPduId );
 
 Std_ReturnType CanTp_ChangeParameter ( PduIdType id, TPParameterType parameter, uint16 value );
 
 Std_ReturnType CanTp_ReadParameter ( PduIdType id, TPParameterType parameter, uint16* value );
 
-void CanTp_MainFunction ( void ); // uwaga tego chyba nie implementujemy bo dotyczy schedule managera
+void CanTp_MainFunction ( void ); 
 
 // callbacks
 
 void CanTp_TxConfirmation ( PduIdType TxPduId, Std_ReturnType result );
 
-void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr );
+void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
 
-static Std_ReturnType CanTp_FrameCheckType(uint8* can_data, CanFrameInfo_Type* CanFrameInfo){
+/*
+    CanTp_FrameCheckType();
+    CanTp_ExtractLength();
+
+    retval = PduR_CanTpStartOfReception(id, info, Length, buffer_size_ptr);
+
+    if( retval == BUFREQ_E_NOT_OK) return E_NOT_OK;
+    else if( retval == BUFREQ_OK){
+        PduR_CanTpCopyRxData( id, info, bufferSizePtr);
+        PduR_CanTpRxIndication( id, E_OK );
+    }
+    */
+
+}
+
+static Std_ReturnType CanTp_GetPCI(PduInfoType* can_data, CanPCI_Type* CanFrameInfo){
     Std_ReturnType ret = E_OK;
 
+    if( NE_NULL_PTR(can_data) && NE_NULL_PTR(CanFrameInfo) && ( NE_NULL_PTR(can_data->SduDataPtr) ) ){
 
-    switch( (*can_data) >> 4){
-        case 0x00:
-            CanFrameInfo->frame_type = SF;
-            CanFrameInfo->frame_lenght = *can_data;
-        break;
+        CanFrameInfo->frame_type = UNKNOWN;
+        CanFrameInfo->frame_lenght = 0;
+        CanFrameInfo->BS = 0;
+        CanFrameInfo->FS = 0;
+        CanFrameInfo->ST = 0;
+        CanFrameInfo->SN = 0;
 
-        case 0x01:
-            CanFrameInfo->frame_type = FF;
-            if( ((*can_data) & 0x0F) | *(can_data + 1)) {
-                CanFrameInfo->frame_lenght =  (*can_data) & 0x0F;
-                CanFrameInfo->frame_lenght =  (CanFrameInfo->frame_lenght << 8) | *(can_data + 1); 
-            }
-            else{
-                CanFrameInfo->frame_lenght =  *(can_data+2);
-                CanFrameInfo->frame_lenght =  (CanFrameInfo->frame_lenght << 8) | *(can_data + 3); 
-                CanFrameInfo->frame_lenght =  (CanFrameInfo->frame_lenght << 8) | *(can_data + 4); 
-                CanFrameInfo->frame_lenght =  (CanFrameInfo->frame_lenght << 8) | *(can_data + 5); 
-            }
-        break;
-        case 0x02:
-            CanFrameInfo->frame_type = CF;
-        break;
+        switch( (can_data->SduDataPtr[0]) >> 4 ){
+            case SF_ID:
+                CanFrameInfo->frame_type = SF;
+                CanFrameInfo->frame_lenght = can_data->SduDataPtr[0];
+            break;
 
-        case 0x03:
-            CanFrameInfo->frame_type = FC;
-            CanFrameInfo->FS = *(can_data) & 0x0F; 
-            CanFrameInfo->BS = *(can_data + 1); 
-            CanFrameInfo->ST = *(can_data + 2); 
-        break;
+            case FF_ID:
+                CanFrameInfo->frame_type = FF;
+                if( (can_data->SduDataPtr[0] & 0x0F) | can_data->SduDataPtr[1] ) {
+                    CanFrameInfo->frame_lenght =  can_data->SduDataPtr[0] & 0x0F;
+                    CanFrameInfo->frame_lenght =  (CanFrameInfo->frame_lenght << 8) | can_data->SduDataPtr[1]; 
+                }
+                else{
+                    CanFrameInfo->frame_lenght =  can_data->SduDataPtr[2];
+                    CanFrameInfo->frame_lenght =  (CanFrameInfo->frame_lenght << 8) | can_data->SduDataPtr[3]; 
+                    CanFrameInfo->frame_lenght =  (CanFrameInfo->frame_lenght << 8) | can_data->SduDataPtr[4];
+                    CanFrameInfo->frame_lenght =  (CanFrameInfo->frame_lenght << 8) | can_data->SduDataPtr[5];
+                }
+            break;
 
-        default:
-            ret = E_NOT_OK;
-        break;
+            case CF_ID:
+                CanFrameInfo->frame_type = CF;
+                CanFrameInfo->SN= (can_data->SduDataPtr[0] & 0x0F );
+            break;
+
+            case 0x03:
+                CanFrameInfo->frame_type = FC;
+                CanFrameInfo->FS = can_data->SduDataPtr[0] & 0x0F; 
+                CanFrameInfo->BS = can_data->SduDataPtr[1]; 
+                CanFrameInfo->ST = can_data->SduDataPtr[2]; 
+            break;
+
+            default:
+                ret = E_NOT_OK;
+            break;
+        }
     }
-
+    else{
+        ret = E_NOT_OK;
+    }
     return ret;
 }
