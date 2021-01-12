@@ -284,6 +284,7 @@ static Std_ReturnType CanTp_GetPCI(PduInfoType* can_data, CanPCI_Type* CanFrameI
     return ret;
 }
 
+
 Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload){
 
     /* TODO
@@ -305,16 +306,7 @@ Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *Ca
 
     Std_ReturnType ret = E_OK;
 
-    //Init CanPdu_Info if wrong frame type ? 
-
-    
-
-
     if( NE_NULL_PTR(CanPCI) && NE_NULL_PTR(CanPdu_Info) && NE_NULL_PTR(Can_payload) ){
-        ret = E_NOT_OK;
-    }
-    else{
-
         switch(CanPCI->frame_type){
             case SF:
                 *(CanPdu_Info->SduDataPtr) = 0;
@@ -341,6 +333,9 @@ Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *Ca
                 ret = E_NOT_OK;
             break;
         }
+    }
+    else{
+        ret = E_NOT_OK;
     }
 
     return ret;

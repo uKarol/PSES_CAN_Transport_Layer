@@ -148,21 +148,21 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
 
   //Signle frame, lenght = 7
   CanPCI.frame_type = SF;
-  CanPCI.frame_lenght;
+  CanPCI.frame_lenght = sizeof(Can_payload_example);
   memcpy(Can_payload, Can_payload_example, sizeof(Can_payload_example));
   retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
   TEST_CHECK(retv == E_OK);
   TEST_CHECK(CanPDU.SduDataPtr[0] == (SF_ID << 4) | sizeof(Can_payload_example));
-  TEST_CHECK(memcmp(Can_payload_example, CanPDU.SduDataPtr+1, sizeof(Can_payload_example)));
+  TEST_CHECK(memcmp(Can_payload_example, CanPDU.SduDataPtr + 1, CanPCI.frame_lenght) == 0);
 
   //Signle frame, lenght = short
   CanPCI.frame_type = SF;
-  CanPCI.frame_lenght;
+  CanPCI.frame_lenght = sizeof(Can_payload_example_short);
   memcpy(Can_payload, Can_payload_example_short, sizeof(Can_payload_example_short));
   retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
   TEST_CHECK(retv == E_OK);
   TEST_CHECK(CanPDU.SduDataPtr[0] == (SF_ID << 4) | sizeof(Can_payload_example_short));
-  TEST_CHECK(memcmp(Can_payload_example, CanPDU.SduDataPtr+1, sizeof(Can_payload_example_short)));
+  TEST_CHECK(memcmp(Can_payload_example, CanPDU.SduDataPtr+1, CanPCI.frame_lenght) == 0);
 
   //Signle frame, lenght >= 8
   CanPCI.frame_type = SF;
@@ -176,14 +176,14 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
   CanPCI.SN = 0;
   retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
   TEST_CHECK(retv == E_OK);
-  TEST_CHECK(CanPDU.SduDataPtr[0] == (CF_ID << 4) | CanPCI.SN));
+  TEST_CHECK(CanPDU.SduDataPtr[0] == (CF_ID << 4) | CanPCI.SN);
 
   //Consecutive frame, SN != 0; 
   CanPCI.frame_type = CF;
   CanPCI.SN = 1;
   retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
   TEST_CHECK(retv == E_OK);
-  TEST_CHECK(CanPDU.SduDataPtr[0] == (CF_ID << 4) | CanPCI.SN));
+  TEST_CHECK(CanPDU.SduDataPtr[0] == (CF_ID << 4) | CanPCI.SN);
 
   //FirstFrame
   CanPCI.frame_type = FF;
