@@ -38,14 +38,20 @@ typedef enum {
 typedef enum {
     CANTP_RX_WAIT,
     CANTP_RX_PROCESSING
-} CanTpRxState_Type;
+} CanTp_RxState_Type;
 
 typedef enum {
     CANTP_TX_WAIT,
     CANTP_TX_PROCESSING
-} CanTpTxState_Type;
+} CanTp_TxState_Type;
 
-typedef enum {SF = 0, FF = 1, CF = 2, FC = 3, UNKNOWN = 4} frame_type_t;
+typedef enum {
+    SF = 0, // signel frame
+    FF = 1, // first frame
+    CF = 2, // consecutive frame
+    FC = 3, // flow control frame
+    UNKNOWN = 4
+    } frame_type_t;
 
 typedef struct{
     frame_type_t frame_type;
@@ -59,15 +65,18 @@ typedef struct{
 /*====================================================================================================================*\
     Zmienne globalne
 \*====================================================================================================================*/
-
+CanTpState_Type CanTp_State; 
+CanTp_TxState_Type CanTp_TxState;
+CanTp_RxState_Type CanTp_RxState;
 /*====================================================================================================================*\
     Zmienne lokalne (statyczne)
 \*====================================================================================================================*/
-static CanTpState_Type CanTpState; 
+
 /*====================================================================================================================*\
     Deklaracje funkcji lokalnych
 \*====================================================================================================================*/
-
+static Std_ReturnType CanTp_GetPCI(PduInfoType* can_data, CanPCI_Type* CanFrameInfo);
+static Std_ReturnType Can_Tp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload);
 /*====================================================================================================================*\
     Kod globalnych funkcji inline i makr funkcyjnych
 \*====================================================================================================================*/
@@ -194,18 +203,29 @@ void CanTp_TxConfirmation ( PduIdType TxPduId, Std_ReturnType result );
 
 void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
 
-/*
-    CanTp_FrameCheckType();
-    CanTp_ExtractLength();
+ /*  
+    DZIADOSTWO, NIE ZWRACAC NA TO UWAGI
+    
+     CanPCI_Type Can_PCI;
+    PduLengthType buffer_size;
+    BufReq_ReturnType Buf_Status;
+    Std_ReturnType retval = E_OK;
 
-    retval = PduR_CanTpStartOfReception(id, info, Length, buffer_size_ptr);
+    CanTp_GetPCI( PduInfoPtr, &Can_PCI );
 
-    if( retval == BUFREQ_E_NOT_OK) return E_NOT_OK;
-    else if( retval == BUFREQ_OK){
-        PduR_CanTpCopyRxData( id, info, bufferSizePtr);
-        PduR_CanTpRxIndication( id, E_OK );
+    if( Can_PCI.frame_type == FF ){
+
+        Buf_Status = PduR_CanTpStartOfReception( RxPduId, PduInfoPtr, Can_PCI.frame_lenght, buffer_size);
+        if( Buf_Status == BUFREQ_OK ) {
+
+        } 
+        else
+        {
+            retval = E_NOT_OK;
+        } 
     }
-    */
+
+    return retval;*/
 
 }
 
@@ -262,4 +282,25 @@ static Std_ReturnType CanTp_GetPCI(PduInfoType* can_data, CanPCI_Type* CanFrameI
         ret = E_NOT_OK;
     }
     return ret;
+}
+
+static Std_ReturnType Can_Tp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload){
+
+    /* TODO
+        Przygotować funkcję i napisać do niej UT
+
+        Funkcja ma przyjmować strukturę PCI, Wskaźnik na ramkę, i tablice z zawartością (payload)    
+
+        Wejscie:
+        CanPCI - strukturka z metadanymi 
+        CanPdu_Info - docelowa ramka
+        Can_payload - treść któą włożymy do ramki (tylko Consecutive i Single Frame) - może mieć max 7 bajtów 
+
+        Składanie ramki ma być zgodne ze specyfikacją autosarową:
+        https://drive.google.com/drive/folders/1lAoLr9j1brjr8pam5zddvbTAf297gXCo?fbclid=IwAR01armEu1UxoFRvtUuRi9BI2D4Ep8igP4bWNgwrwoyXUae7FVnl84VJ41I
+
+        CanTransporLayer, str 28
+
+    */
+
 }
