@@ -261,15 +261,20 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
   TEST_CHECK(retv == E_OK);
   TEST_CHECK(CanPDU.SduDataPtr[0] == (CF_ID << 4) | CanPCI.SN);
 
-  //Consecutive frame, SN != 0; 
+  //Consecutive frame, SN < 8; 
   CanPCI.frame_type = CF;
   CanPCI.SN = 1;
   retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
   TEST_CHECK(retv == E_OK);
   TEST_CHECK(CanPDU.SduDataPtr[0] == (CF_ID << 4) | CanPCI.SN);
 
+  //Consecutive frame, SN  >= 8; 
+  CanPCI.frame_type = CF;
+  CanPCI.SN = 0x10;
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_NOT_OK);
 
-  //Flow control
+  //Flow control, FS  < 7
   CanPCI.frame_type = FC;
   CanPCI.FS = 0x01;
   CanPCI.BS = 0xF1;
@@ -280,6 +285,13 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
   TEST_CHECK(CanPDU.SduDataPtr[0] == (FC_ID << 4) | CanPCI.FS);
   TEST_CHECK(CanPDU.SduDataPtr[1] == CanPCI.BS);
   TEST_CHECK(CanPDU.SduDataPtr[2] = CanPCI.ST);
+
+  //Flow control, FS  >= 8
+  CanPCI.frame_type = FC;
+  CanPCI.FS = 0x10;
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_NOT_OK);
+
 
 
   //FF, DL <= 4095

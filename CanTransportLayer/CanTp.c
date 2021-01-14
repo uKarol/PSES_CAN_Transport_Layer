@@ -325,7 +325,13 @@ Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *Ca
             case CF: 
                 *(CanPdu_Info->SduDataPtr) = 0;
                 *(CanPdu_Info->SduDataPtr) = CF_ID << 4;
-                *(CanPdu_Info->SduDataPtr) |= (0x0F & CanPCI->SN);
+                if(CanPCI->SN < 7){
+                    *(CanPdu_Info->SduDataPtr) |= (0x0F & CanPCI->SN);
+                }
+                else{
+                    ret = E_NOT_OK; 
+                }
+
             break;
             case FF:    
                 *(CanPdu_Info->SduDataPtr) = 0;
@@ -357,9 +363,15 @@ Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *Ca
             case FC:
                 *(CanPdu_Info->SduDataPtr) = 0;
                 *(CanPdu_Info->SduDataPtr) = FC_ID << 4;
-                *(CanPdu_Info->SduDataPtr) |= (0x0F & CanPCI->FS);
-                *(CanPdu_Info->SduDataPtr + 1) = CanPCI->BS;
-                *(CanPdu_Info->SduDataPtr + 2) = CanPCI->ST;
+
+                if(CanPCI->FS < 7){
+                    *(CanPdu_Info->SduDataPtr) |= (0x0F & CanPCI->FS);
+                    *(CanPdu_Info->SduDataPtr + 1) = CanPCI->BS;
+                    *(CanPdu_Info->SduDataPtr + 2) = CanPCI->ST;
+                }
+                else{
+                    ret = E_NOT_OK;
+                }
             break;
             default:
                 ret = E_NOT_OK;
