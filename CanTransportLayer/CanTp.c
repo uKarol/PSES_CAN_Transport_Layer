@@ -327,8 +327,41 @@ Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *Ca
                 *(CanPdu_Info->SduDataPtr) = CF_ID << 4;
                 *(CanPdu_Info->SduDataPtr) |= (0x0F & CanPCI->SN);
             break;
-            case FF:
+            case FF:    
+                *(CanPdu_Info->SduDataPtr) = 0;
+                *(CanPdu_Info->SduDataPtr) = FF_ID << 4;
+
+                if(CanPCI->frame_lenght <= 4095){
+                    *(CanPdu_Info->SduDataPtr) |= (0x0F & (CanPCI->frame_lenght >> 8));
+                    *(CanPdu_Info->SduDataPtr + 1) = (0xFF & (CanPCI->frame_lenght));
+
+                    *(CanPdu_Info->SduDataPtr + 2) = *(Can_payload);
+                    *(CanPdu_Info->SduDataPtr + 3) = *(Can_payload + 1);
+                    *(CanPdu_Info->SduDataPtr + 4) = *(Can_payload + 2);
+                    *(CanPdu_Info->SduDataPtr + 5) = *(Can_payload + 3);
+                    *(CanPdu_Info->SduDataPtr + 6) = *(Can_payload + 4);
+                    *(CanPdu_Info->SduDataPtr + 7) = *(Can_payload + 5);
+                    *(CanPdu_Info->SduDataPtr + 8) = *(Can_payload + 6);
+                }
+                else{
+                    *(CanPdu_Info->SduDataPtr + 1) = 0;
+
+                    *(CanPdu_Info->SduDataPtr + 2) = (CanPCI->frame_lenght >> 24) & 0xFF;
+                    *(CanPdu_Info->SduDataPtr + 3) = (CanPCI->frame_lenght >> 16) & 0xFF;
+                    *(CanPdu_Info->SduDataPtr + 4) = (CanPCI->frame_lenght >> 8) & 0xFF;
+                    *(CanPdu_Info->SduDataPtr + 5) = (CanPCI->frame_lenght >> 0) & 0xFF;
+
+                    *(CanPdu_Info->SduDataPtr + 6) = *(Can_payload);
+                    *(CanPdu_Info->SduDataPtr + 7) = *(Can_payload + 1);
+                }
+            break;
             case FC:
+                *(CanPdu_Info->SduDataPtr) = 0;
+                *(CanPdu_Info->SduDataPtr) = FC_ID << 4;
+                *(CanPdu_Info->SduDataPtr) |= (0x0F & CanPCI->FS);
+                *(CanPdu_Info->SduDataPtr + 1) = CanPCI->BS;
+                *(CanPdu_Info->SduDataPtr + 2) = CanPCI->ST;
+            break;
             default:
                 ret = E_NOT_OK;
             break;

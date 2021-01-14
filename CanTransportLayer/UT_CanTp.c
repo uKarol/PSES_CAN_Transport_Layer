@@ -90,6 +90,8 @@ void Test_Of_PduR_CanTpStartOfReception(void){
 
 }
 
+
+#include "stdio.h"
 /**
   @brief Test dodawania
 
@@ -221,7 +223,8 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
 
   static const uint8_t Can_payload_example[] = {0x00, 0xFF, 0x01, 0xFE, 0x02, 0x03, 0x04};
   static const uint8_t Can_payload_example_short[] = {0x00, 0xFF};
-
+  static const uint32_t ff_short_frame_lenght[] = {0x01, 0xFFF, 0xFFE, 0x111};
+  static const uint32_t ff_long_frame_lenght[] = {0x00001000, 0xFFFFFFFF, 0xFFFFFFFE, 0x11111111};
 
   CanPDU.SduDataPtr = sdu_data;
 
@@ -265,14 +268,55 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
   TEST_CHECK(retv == E_OK);
   TEST_CHECK(CanPDU.SduDataPtr[0] == (CF_ID << 4) | CanPCI.SN);
 
-  //FirstFrame
-  CanPCI.frame_type = FF;
-  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
-  TEST_CHECK(retv == E_NOT_OK);
-  
-  //FlowControl
+
+  //Flow control
   CanPCI.frame_type = FC;
+  CanPCI.FS = 0x01;
+  CanPCI.BS = 0xF1;
+  CanPCI.ST = 0x1F;
+
   retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+  TEST_CHECK(retv == E_OK);
+  TEST_CHECK(CanPDU.SduDataPtr[0] == (FC_ID << 4) | CanPCI.FS);
+  TEST_CHECK(CanPDU.SduDataPtr[1] == CanPCI.BS);
+  TEST_CHECK(CanPDU.SduDataPtr[2] = CanPCI.ST);
+
+
+  //FF, DL <= 4095
+  for(uint8_t i = 0; i < 4; i++){
+    CanPCI.frame_type = FF;
+    CanPCI.frame_lenght = ff_short_frame_lenght[i];
+    memcpy(Can_payload, Can_payload_example, sizeof(Can_payload_example));
+    retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+    TEST_CHECK(retv == E_OK);
+    TEST_CHECK(((CanPDU.SduDataPtr[0] >> 4) & 0x0F) == FF_ID);            //frame type
+    TEST_CHECK((CanPDU.SduDataPtr[0] & 0x0F) == ((CanPCI.frame_lenght >> 8) & 0x0F)); //4 highest bits of frame lenght
+    TEST_CHECK(CanPDU.SduDataPtr[1] == (CanPCI.frame_lenght & 0xFF));     //8 first bits of frame lenght
+    TEST_CHECK(CanPDU.SduDataPtr[1] == (CanPCI.frame_lenght & 0xFF));
+    TEST_CHECK(memcmp(Can_payload_example, CanPDU.SduDataPtr+2, 6) == 0);
+  }
+
+  //FF, DL > 4095
+  for(uint8_t i = 0; i < 4; i++){
+    CanPCI.frame_type = FF;
+    CanPCI.frame_lenght = ff_long_frame_lenght[i];
+    memcpy(Can_payload, Can_payload_example, sizeof(Can_payload_example));
+    retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
+    TEST_CHECK(retv == E_OK);
+    TEST_CHECK(((CanPDU.SduDataPtr[0] >> 4) & 0x0F) == FF_ID);            //frame type
+    TEST_CHECK((CanPDU.SduDataPtr[0] & 0x0F) == 0 ); //4 highest bits of frame lenght
+    TEST_CHECK(CanPDU.SduDataPtr[1] == 0);     //8 first bits of frame lenght
+    TEST_CHECK(CanPDU.SduDataPtr[2] == ((CanPCI.frame_lenght >> 24) & 0xFF));
+    TEST_CHECK(CanPDU.SduDataPtr[3] == ((CanPCI.frame_lenght >> 16) & 0xFF));
+    TEST_CHECK(CanPDU.SduDataPtr[4] == ((CanPCI.frame_lenght >> 8) & 0xFF));
+    TEST_CHECK(CanPDU.SduDataPtr[5] == ((CanPCI.frame_lenght >> 0) & 0xFF));
+    TEST_CHECK(memcmp(Can_payload_example, CanPDU.SduDataPtr+6, 2) == 0);
+  }
+
+
+  //Uknown frame:
+  CanPCI.frame_type = UNKNOWN;
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, NULL);
   TEST_CHECK(retv == E_NOT_OK);
 
   //Payload is NULL:
@@ -296,7 +340,7 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
 TEST_LIST = {
     //{ "Test_Of_CanTp_FrameCheckType", Test_Of_CanTp_FrameCheckType },   /* Format to { "nazwa testu", nazwa_funkcji } */
     { "Test_Of_CanTp_PrepareSegmenetedFrame", Test_Of_CanTp_PrepareSegmenetedFrame },
-    { "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
+    //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
    // { "Test of Lib_Calc_Sub", Test_Of_Lib_Calc_Sub },
     { NULL, NULL }                                      /* To musi być na końcu */
 };
