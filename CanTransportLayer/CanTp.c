@@ -341,7 +341,6 @@ Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *Ca
                     *(CanPdu_Info->SduDataPtr + 5) = *(Can_payload + 3);
                     *(CanPdu_Info->SduDataPtr + 6) = *(Can_payload + 4);
                     *(CanPdu_Info->SduDataPtr + 7) = *(Can_payload + 5);
-                    *(CanPdu_Info->SduDataPtr + 8) = *(Can_payload + 6);
                 }
                 else{
                     *(CanPdu_Info->SduDataPtr + 1) = 0;
