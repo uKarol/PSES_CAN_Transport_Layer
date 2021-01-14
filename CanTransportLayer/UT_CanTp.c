@@ -328,7 +328,7 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
 
   //Uknown frame:
   CanPCI.frame_type = UNKNOWN;
-  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, NULL);
+  retv = CanTp_PrepareSegmenetedFrame(&CanPCI, &CanPDU, Can_payload);
   TEST_CHECK(retv == E_NOT_OK);
 
   //Payload is NULL:
