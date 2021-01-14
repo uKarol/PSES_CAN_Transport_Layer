@@ -10,6 +10,86 @@
 #include "CanTp.c"  
 #include <stdio.h>
 
+#include "fff.h"
+
+DEFINE_FFF_GLOBALS; 
+
+FAKE_VALUE_FUNC(BufReq_ReturnType, PduR_CanTpStartOfReception, PduIdType, const PduInfoType*, PduLengthType, PduLengthType*);
+ 
+PduLengthType *buffSize_array;//[10] = {1,2,3,4,5,6,7,8,9,0};
+
+BufReq_ReturnType PduR_CanTpStartOfReception_FF (PduIdType id, const PduInfoType* info, PduLengthType TpSduLength, PduLengthType* bufferSizePtr ){
+    static int i = 0;
+    i = PduR_CanTpStartOfReception_fake.call_count - 1;
+    *bufferSizePtr = buffSize_array[i];
+   return PduR_CanTpStartOfReception_fake.return_val_seq[i];
+}
+
+void Test_Of_PduR_CanTpStartOfReception(void){
+
+    PduIdType id;
+    PduInfoType info; 
+    PduLengthType TpSduLength;
+    PduLengthType bufferSizePtr;
+
+    BufReq_ReturnType retv;
+    
+    PduLengthType buffSize_array_local[10] = {1,2,3,4,5,6,7,8,9,0};
+
+    buffSize_array = buffSize_array_local;
+
+    
+    BufReq_ReturnType BufferReturnVals[4] = { BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_BUSY, BUFREQ_OVFL };
+    SET_RETURN_SEQ(PduR_CanTpStartOfReception, BufferReturnVals, 4);
+    PduR_CanTpStartOfReception_fake.custom_fake =  PduR_CanTpStartOfReception_FF;
+    
+
+    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
+    TEST_CHECK(bufferSizePtr == 1);
+    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 1);
+    TEST_CHECK(retv == BUFREQ_OK);
+
+    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
+    TEST_CHECK(bufferSizePtr == 2);
+    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 2);
+    TEST_CHECK(retv == BUFREQ_E_NOT_OK);
+
+    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
+    TEST_CHECK(bufferSizePtr == 3);
+    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 3);
+    TEST_CHECK(retv == BUFREQ_BUSY);
+
+    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
+    TEST_CHECK(bufferSizePtr == 4);
+    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 4);
+    TEST_CHECK(retv == BUFREQ_OVFL);
+
+    RESET_FAKE(PduR_CanTpStartOfReception);
+    SET_RETURN_SEQ(PduR_CanTpStartOfReception, BufferReturnVals, 4);
+    PduR_CanTpStartOfReception_fake.custom_fake =  PduR_CanTpStartOfReception_FF;
+
+    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
+    TEST_CHECK(bufferSizePtr == 1);
+    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 1);
+    TEST_CHECK(retv == BUFREQ_OK);
+
+    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
+    TEST_CHECK(bufferSizePtr == 2);
+    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 2);
+    TEST_CHECK(retv == BUFREQ_E_NOT_OK);
+
+    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
+    TEST_CHECK(bufferSizePtr == 3);
+    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 3);
+    TEST_CHECK(retv == BUFREQ_BUSY);
+
+    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
+    TEST_CHECK(bufferSizePtr == 4);
+    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 4);
+    TEST_CHECK(retv == BUFREQ_OVFL);
+
+}
+
 /**
   @brief Test dodawania
 
@@ -208,12 +288,15 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
   TEST_CHECK(retv == E_NOT_OK);
 }
 
+
+
 /*
   Lista testów - wpisz tutaj wszystkie funkcje które mają być wykonane jako testy.
 */
 TEST_LIST = {
     //{ "Test_Of_CanTp_FrameCheckType", Test_Of_CanTp_FrameCheckType },   /* Format to { "nazwa testu", nazwa_funkcji } */
     { "Test_Of_CanTp_PrepareSegmenetedFrame", Test_Of_CanTp_PrepareSegmenetedFrame },
+    { "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
    // { "Test of Lib_Calc_Sub", Test_Of_Lib_Calc_Sub },
     { NULL, NULL }                                      /* To musi być na końcu */
 };
