@@ -14,18 +14,49 @@
 
 DEFINE_FFF_GLOBALS; 
 
-FAKE_VALUE_FUNC(BufReq_ReturnType, PduR_CanTpStartOfReception, PduIdType, const PduInfoType*, PduLengthType, PduLengthType*);
- 
-PduLengthType *buffSize_array;//[10] = {1,2,3,4,5,6,7,8,9,0};
+// fake functions from PDU Router
+
+FAKE_VALUE_FUNC(BufReq_ReturnType, PduR_CanTpCopyRxData, PduIdType, const PduInfoType*, PduLengthType*);
+FAKE_VALUE_FUNC(BufReq_ReturnType, PduR_CanTpCopyTxData, PduIdType, const PduInfoType*, const RetryInfoType*, PduLengthType*);
+FAKE_VALUE_FUNC(BufReq_ReturnType, PduR_CanTpStartOfReception, PduIdType, const PduInfoType*, PduLengthType, PduLengthType* );
+FAKE_VOID_FUNC(PduR_CanTpRxIndication, PduIdType, Std_ReturnType );
+FAKE_VOID_FUNC(PduR_CanTpTxConfirmation, PduIdType, Std_ReturnType );
+
+// fake functions from Can Interface
+
+FAKE_VALUE_FUNC( Std_ReturnType, CanIf_Transmit, PduIdType, const PduInfoType* );
+
+// custom fake functions
+PduLengthType* PduR_CanTpCopyRxData_buffSize_array;
+
+BufReq_ReturnType PduR_CanTpCopyRxData_FF ( PduIdType id, const PduInfoType* info, PduLengthType* bufferSizePtr ){
+    static int i = 0;
+    i = PduR_CanTpCopyRxData_fake.call_count - 1;
+    *bufferSizePtr = PduR_CanTpCopyRxData_buffSize_array[i];
+    return PduR_CanTpCopyRxData_fake.return_val_seq[i];
+}
+
+BufReq_ReturnType PduR_CanTpCopyTxData_FF ( PduIdType id, const PduInfoType* info, const RetryInfoType* retry, PduLengthType* availableDataPtr ){
+  // to be continued
+}
+
+PduLengthType *PduR_CanTpStartOfReception_buffSize_array;
 
 BufReq_ReturnType PduR_CanTpStartOfReception_FF (PduIdType id, const PduInfoType* info, PduLengthType TpSduLength, PduLengthType* bufferSizePtr ){
     static int i = 0;
     i = PduR_CanTpStartOfReception_fake.call_count - 1;
-    *bufferSizePtr = buffSize_array[i];
+    *bufferSizePtr = PduR_CanTpStartOfReception_buffSize_array[i];
    return PduR_CanTpStartOfReception_fake.return_val_seq[i];
 }
 
-void Test_Of_PduR_CanTpStartOfReception(void){
+// end of fake functions
+
+// start of unit tests
+
+
+// tests of custom FF
+
+void Test_Of_Custom_FFs(void){
 
     PduIdType id;
     PduInfoType info; 
@@ -33,63 +64,42 @@ void Test_Of_PduR_CanTpStartOfReception(void){
     PduLengthType bufferSizePtr;
 
     BufReq_ReturnType retv;
+
+    int i;
     
     PduLengthType buffSize_array_local[10] = {1,2,3,4,5,6,7,8,9,0};
-
-    buffSize_array = buffSize_array_local;
+    PduR_CanTpStartOfReception_buffSize_array = buffSize_array_local;
+    PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
 
     
-    BufReq_ReturnType BufferReturnVals[4] = { BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_BUSY, BUFREQ_OVFL };
-    SET_RETURN_SEQ(PduR_CanTpStartOfReception, BufferReturnVals, 4);
+    BufReq_ReturnType BufferReturnVals[10] = { BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_BUSY, BUFREQ_OVFL, BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_BUSY, BUFREQ_OVFL, BUFREQ_OK, BUFREQ_OK };
+    SET_RETURN_SEQ(PduR_CanTpStartOfReception, BufferReturnVals, 10);
     PduR_CanTpStartOfReception_fake.custom_fake =  PduR_CanTpStartOfReception_FF;
+
+  
+    SET_RETURN_SEQ(PduR_CanTpCopyRxData, BufferReturnVals, 10);
+    PduR_CanTpCopyRxData_fake.custom_fake = PduR_CanTpCopyRxData_FF;
     
+    for( i = 0; i<10; i++){
+      retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
+      TEST_CHECK(bufferSizePtr == buffSize_array_local[i]);
+      TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == i+1);
+      TEST_CHECK(retv == BufferReturnVals[i] );
+    }
 
-    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
-    TEST_CHECK(bufferSizePtr == 1);
-    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 1);
-    TEST_CHECK(retv == BUFREQ_OK);
+    for( i = 0; i<10; i++){
+      retv = PduR_CanTpCopyRxData (id, &info, &bufferSizePtr );
+      TEST_CHECK(bufferSizePtr == buffSize_array_local[i]);
+      TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == i+1);
+      TEST_CHECK(retv == BufferReturnVals[i] );
+    }
 
-    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
-    TEST_CHECK(bufferSizePtr == 2);
-    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 2);
-    TEST_CHECK(retv == BUFREQ_E_NOT_OK);
 
-    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
-    TEST_CHECK(bufferSizePtr == 3);
-    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 3);
-    TEST_CHECK(retv == BUFREQ_BUSY);
 
-    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
-    TEST_CHECK(bufferSizePtr == 4);
-    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 4);
-    TEST_CHECK(retv == BUFREQ_OVFL);
-
-    RESET_FAKE(PduR_CanTpStartOfReception);
-    SET_RETURN_SEQ(PduR_CanTpStartOfReception, BufferReturnVals, 4);
-    PduR_CanTpStartOfReception_fake.custom_fake =  PduR_CanTpStartOfReception_FF;
-
-    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
-    TEST_CHECK(bufferSizePtr == 1);
-    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 1);
-    TEST_CHECK(retv == BUFREQ_OK);
-
-    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
-    TEST_CHECK(bufferSizePtr == 2);
-    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 2);
-    TEST_CHECK(retv == BUFREQ_E_NOT_OK);
-
-    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
-    TEST_CHECK(bufferSizePtr == 3);
-    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 3);
-    TEST_CHECK(retv == BUFREQ_BUSY);
-
-    retv = PduR_CanTpStartOfReception (id, &info, TpSduLength, &bufferSizePtr );
-    TEST_CHECK(bufferSizePtr == 4);
-    TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 4);
-    TEST_CHECK(retv == BUFREQ_OVFL);
 
 }
 
+// tests of static CanTp functions
 
 #include "stdio.h"
 /**
@@ -344,16 +354,118 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
   TEST_CHECK(retv == E_NOT_OK);
 }
 
+//test of CanTp_RxIndication
+void Test_Of_CanTp_RxIndication(void){
 
+// declare test variables
+  int i;
+  PduIdType  RxPduId = 1;
 
+  PduInfoType PduInfoPtr;
+  CanPCI_Type CanPCI;
+
+// configure FF
+
+  RESET_FAKE(PduR_CanTpStartOfReception);
+  RESET_FAKE(PduR_CanTpCopyRxData); 
+// PDU Router FF
+  PduLengthType buffSize_array_local[10] = {7,1,7,7,7,6,7,8,9,0};
+  PduR_CanTpStartOfReception_buffSize_array = buffSize_array_local;
+  PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
+
+    
+  BufReq_ReturnType PduR_CanTpStartOfReception_ReturnVals[10] = { BUFREQ_OK, BUFREQ_OK, BUFREQ_OVFL, BUFREQ_OK}; 
+  BufReq_ReturnType PduR_CanTpCopyRxData_ReturnVals[10] =       { BUFREQ_OK, BUFREQ_E_NOT_OK}; 
+  SET_RETURN_SEQ(PduR_CanTpStartOfReception, PduR_CanTpStartOfReception_ReturnVals, 4);
+  PduR_CanTpStartOfReception_fake.custom_fake =  PduR_CanTpStartOfReception_FF;
+
+  SET_RETURN_SEQ(PduR_CanTpCopyRxData, PduR_CanTpCopyRxData_ReturnVals, 2);
+  PduR_CanTpCopyRxData_fake.custom_fake = PduR_CanTpCopyRxData_FF;
+
+// set CanTp internal variables
+
+// testujemy scenariusz ze strony 62
+// 9.2 Successful SF N-PDU reception
+  CanTp_RxState = CANTP_RX_WAIT;
+
+  CanPCI.frame_lenght = 7;
+  CanPCI.frame_type = SF;
+  uint8 payload[8] = "kasztan"; 
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
+
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduLength == 7);
+
+  //TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[i] == payload[i]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
+  
+
+  TEST_CHECK(CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 1); // this funtions shulod be called
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1); // this functio shlud be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 1);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_OK);
+
+ // te same dane, ale teraz bufor za mały
+
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
+  TEST_CHECK(CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 2); // this funtions shulod be called
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1); // this functio shlud not be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); // this functio shlud not be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
+  // te same dane, ale teraz bufor sie wysypal
+   
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
+  TEST_CHECK(CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 3); // this funtions shulod be called
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1); // this functio shlud not be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); // this functio shlud not be called
+  
+  // PduR_CopyData returns error
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduLength == 7);
+
+  //TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[i] == payload[i]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
+  
+
+  TEST_CHECK(CanTp_RxState == CANTP_RX_WAIT);                    // calling function with this argument shouldnt change internal state
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 4);   // this funtions shulod be called
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 2);         // this function should be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 3);       //
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
+
+}
 /*
   Lista testów - wpisz tutaj wszystkie funkcje które mają być wykonane jako testy.
 */
 TEST_LIST = {
-    //{ "Test_Of_CanTp_FrameCheckType", Test_Of_CanTp_FrameCheckType },   /* Format to { "nazwa testu", nazwa_funkcji } */
+    { "Test_Of_CanTp_FrameCheckType", Test_Of_CanTp_FrameCheckType },   /* Format to { "nazwa testu", nazwa_funkcji } */
     { "Test_Of_CanTp_PrepareSegmenetedFrame", Test_Of_CanTp_PrepareSegmenetedFrame },
+    { "Test_Of_Custom_FFs", Test_Of_Custom_FFs},
+    { "Test_Of_CanTp_RxIndication", Test_Of_CanTp_RxIndication},
     //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
-   // { "Test of Lib_Calc_Sub", Test_Of_Lib_Calc_Sub },
     { NULL, NULL }                                      /* To musi być na końcu */
 };
 

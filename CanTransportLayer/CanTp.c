@@ -26,6 +26,8 @@
 #define CF_ID 0x2 // consecutive frame
 #define FC_ID 0x3 // flow control frame
 
+#define DEFAULT_ST 0
+
 
 /*====================================================================================================================*\
     Typy lokalne
@@ -37,7 +39,8 @@ typedef enum {
 
 typedef enum {
     CANTP_RX_WAIT,
-    CANTP_RX_PROCESSING
+    CANTP_RX_PROCESSING,
+    CANTP_END_OF_BLOCK
 } CanTp_RxState_Type;
 
 typedef enum {
@@ -45,6 +48,11 @@ typedef enum {
     CANTP_TX_PROCESSING
 } CanTp_TxState_Type;
 
+typedef enum{
+    FC_OVFLW = 0,
+    FC_WAIT = 1,
+    FC_CTS = 2
+} FlowControlStatus_type;
 typedef enum {
     SF = 0, // signel frame
     FF = 1, // first frame
@@ -75,8 +83,16 @@ CanTp_RxState_Type CanTp_RxState;
 /*====================================================================================================================*\
     Deklaracje funkcji lokalnych
 \*====================================================================================================================*/
-static Std_ReturnType CanTp_GetPCI(PduInfoType* can_data, CanPCI_Type* CanFrameInfo);
-static Std_ReturnType Can_Tp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload);
+static Std_ReturnType CanTp_GetPCI( const PduInfoType* can_data, CanPCI_Type* CanFrameInfo);
+static Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload);
+
+//TODO
+static Std_ReturnType CanTp_SendFlowControl( uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime );
+static void CanTp_N_Br_Start();
+static void CanTp_N_Br_Stop();
+static void CanTp_N_Cr_Start();
+static void CanTp_N_Cr_Stop();
+//static Std_ReturnType Can_Tp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload);
 /*====================================================================================================================*\
     Kod globalnych funkcji inline i makr funkcyjnych
 \*====================================================================================================================*/
@@ -205,31 +221,142 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
 
  /*  
     DZIADOSTWO, NIE ZWRACAC NA TO UWAGI
+    */
+    CanPCI_Type FlowControl_PCI;    // use for prepare Flow Control
+    CanPCI_Type Can_PCI;            // PCI extracted from frame
+    PduLengthType buffer_size;      // use when calling PduR callbacks
+    BufReq_ReturnType Buf_Status;   // use when calling PduR callbacks
+    Std_ReturnType retval = E_OK;   // return 
+    PduInfoType FlowControl;        // prepare flow control frame
+    PduInfoType Extracted_Data;     // Payload extracted from PDU
+    PduIdType SegmentedFrameId = 0; // Id of frame 
+    uint8 temp_data[8];             // array for temp payload
+    uint16 current_block_size;      // currently processes block size (will be global)
+    uint16 message_size;            // size of unsegmented message
+
+    FlowControl.SduDataPtr = temp_data;
+    FlowControl_PCI.frame_type = FF;
     
-     CanPCI_Type Can_PCI;
-    PduLengthType buffer_size;
-    BufReq_ReturnType Buf_Status;
-    Std_ReturnType retval = E_OK;
 
-    CanTp_GetPCI( PduInfoPtr, &Can_PCI );
 
-    if( Can_PCI.frame_type == FF ){
+    if( CanTp_RxState == CANTP_RX_WAIT){
+        
+        SegmentedFrameId = RxPduId; // setting of segmented frame id possible only in waiting state
 
-        Buf_Status = PduR_CanTpStartOfReception( RxPduId, PduInfoPtr, Can_PCI.frame_lenght, buffer_size);
-        if( Buf_Status == BUFREQ_OK ) {
+        CanTp_GetPCI( PduInfoPtr, &Can_PCI );
+
+        //CanTp_AssertPCI( &Can_PCI ); conceptual
+
+        // transmisja danych jeszcze nie wystartowała 
+        // pierwsza ramka musi być SF albo FF, w przeciwnym wypadku mamy błąd
+         
+        if( Can_PCI.frame_type == FF ){
+
+            /*
+            [SWS_CanTp_00079]
+            ⌈When receiving an SF or an FF N-PDU, the CanTp module shall notify the upper layer (PDU Router)
+            about this reception using the PduR_CanTpStartOfReception function. 
+
+            [SWS_CanTp_00329] 
+            CanTp shall provide the content of the FF/SF to PduR
+            */
+            Buf_Status = PduR_CanTpStartOfReception( RxPduId, PduInfoPtr, Can_PCI.frame_lenght, &buffer_size);
+            /*
+
+                [SWS_CanTp_00333] ⌈ When CanTp_RxIndication is called for a CF on a generic connection (N-PDU with MetaData), 
+                the CanTp module shall check the addressing information contained in the MetaData of the N-PDU against the stored values from the FF. ⌋ ()
+                [SWS_CanTp_00080] ⌈The available Rx buffer size is reported to the CanTp in the output pointer parameter of the PduR_CanTpStartOfReception() service. 
+                The available Rx buffer can be smaller than the expected N-SDU data length. 
+            */
+            if( Buf_Status == BUFREQ_OK ) {
+                if( Can_PCI.frame_lenght == buffer_size){
+                    current_block_size = Can_PCI.frame_lenght % 8;
+                    message_size = Can_PCI.frame_lenght;    
+                }
+                else{
+                    
+                }
+                CanTp_SendFlowControl( current_block_size, FC_CTS, DEFAULT_ST );
+                CanTp_RxState = CANTP_RX_PROCESSING; // After Successfull Reception of FF, wait for Consecutive Frames
+            }
+            else if ( Buf_Status == BUFREQ_OVFL ){
+                /*
+                [SWS_CanTp_00318] ⌈After the reception of a First Frame, if the function PduR_CanTpStartOfReception()returns BUFREQ_E_OVFL to the CanTp module, 
+                the CanTp module shall send a Flow Control N-PDU with overflow status (FC(OVFLW)) and abort the N-SDU reception. */
+                CanTp_SendFlowControl( current_block_size, FC_OVFLW, DEFAULT_ST );
+                CanTp_RxState = CANTP_RX_WAIT;
+            }
+            else {
+
+            }
+
+        }
+        // TO DO - SKATOWAĆ TEN KAWALEK KODU
+
+        else if( Can_PCI.frame_type == SF ){
+            CanTp_RxState = CANTP_RX_WAIT;
+            Buf_Status = PduR_CanTpStartOfReception( RxPduId, PduInfoPtr, Can_PCI.frame_lenght, &buffer_size);
+
+            if( (Buf_Status == BUFREQ_OK)  ){
+                
+                if(buffer_size >= Can_PCI.frame_lenght){
+
+                    Extracted_Data.SduLength = Can_PCI.frame_lenght;
+                    Extracted_Data.SduDataPtr = (PduInfoPtr->SduDataPtr+1);
+                    Buf_Status = PduR_CanTpCopyRxData(RxPduId,  &Extracted_Data, &buffer_size);
+
+                    if(Buf_Status == BUFREQ_OK ){
+                        PduR_CanTpRxIndication ( RxPduId, E_OK);
+                    }
+                    else{
+
+                        /*
+                            UWAGA TEGO SAM NIE JESTEM PEWIEN ALE WYDAJE MI SIE TO LOGICZNE
+                            AUTOSAR PRECYZUJE CO SIE STANIE GDY CopyData ZWROCI NOT_OK ALE
+                            DLA CONSECUTIVE FRAME, BRAK JASNOSCI CO SIE MOZE STAC DLA SF
+                        */
+                        PduR_CanTpRxIndication ( RxPduId, E_NOT_OK);
+                    }
+                }
+                else{
+
+                /*
+                    [SWS_CanTp_00339] ⌈After the reception of a First Frame or Single Frame, 
+                    if the function PduR_CanTpStartOfReception() returns BUFREQ_OK with a 
+                    smaller available buffer size than needed for the already received data, 
+                    the CanTp module shall abort the reception of the N-SDU and call 
+                    PduR_CanTpRxIndication() with the result E_NOT_OK. ⌋ ( )
+                */
+                    PduR_CanTpRxIndication ( RxPduId, E_NOT_OK);
+                }
+            }
+            else{
+            /*
+                [SWS_CanTp_00081] ⌈After the reception of a First Frame or Single Frame, 
+                if the function PduR_CanTpStartOfReception()returns BUFREQ_E_NOT_OK to 
+                the CanTp module, the CanTp module shall abort the reception of this N-SDU. 
+                No Flow Control will be sent and PduR_CanTpRxIndication() will not be called 
+                in this case. ⌋ ( ) 
+            */
+
+            /*
+                [SWS_CanTp_00353]⌈After the reception of a Single Frame, if the function 
+                PduR_CanTpStartOfReception()returns BUFREQ_E_OVFL to the CanTp module,
+                the CanTp module shall abort the N-SDU reception.⌋()
+            */
+            }           
 
         } 
         else
         {
+            // in this state, CanTP expect only SF or FF, otherwise it is an error
+            CanTp_RxState = CANTP_RX_WAIT; 
             retval = E_NOT_OK;
         } 
     }
-
-    return retval;*/
-
 }
 
-static Std_ReturnType CanTp_GetPCI(PduInfoType* can_data, CanPCI_Type* CanFrameInfo){
+static Std_ReturnType CanTp_GetPCI( const PduInfoType* can_data, CanPCI_Type* CanFrameInfo){
     Std_ReturnType ret = E_OK;
 
     if( NE_NULL_PTR(can_data) && NE_NULL_PTR(CanFrameInfo) && ( NE_NULL_PTR(can_data->SduDataPtr) ) ){
@@ -266,7 +393,7 @@ static Std_ReturnType CanTp_GetPCI(PduInfoType* can_data, CanPCI_Type* CanFrameI
                 CanFrameInfo->SN= (can_data->SduDataPtr[0] & 0x0F );
             break;
 
-            case 0x03:
+            case FC_ID:
                 CanFrameInfo->frame_type = FC;
                 CanFrameInfo->FS = can_data->SduDataPtr[0] & 0x0F; 
                 CanFrameInfo->BS = can_data->SduDataPtr[1]; 
@@ -285,7 +412,7 @@ static Std_ReturnType CanTp_GetPCI(PduInfoType* can_data, CanPCI_Type* CanFrameI
 }
 
 
-Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload){
+static Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload){
 
     /* TODO
         Przygotować funkcję i napisać do niej UT
@@ -306,14 +433,15 @@ Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *Ca
 
     Std_ReturnType ret = E_OK;
 
-    if( NE_NULL_PTR(CanPCI) && NE_NULL_PTR(CanPdu_Info) && NE_NULL_PTR(Can_payload) ){
+    if( NE_NULL_PTR(CanPCI) && NE_NULL_PTR(CanPdu_Info) && NE_NULL_PTR(Can_payload) ){  
         switch(CanPCI->frame_type){
             case SF:
                 *(CanPdu_Info->SduDataPtr) = 0;
                 *(CanPdu_Info->SduDataPtr) = SF_ID << 4;
         
                 if(CanPCI->frame_lenght <= 7){
-                    *(CanPdu_Info->SduDataPtr) = 0x0F | CanPCI->frame_lenght;
+                 //   *(CanPdu_Info->SduDataPtr) = 0x0F | CanPCI->frame_lenght; // panie kto tu tak spierdolil
+                    *(CanPdu_Info->SduDataPtr) = 0x0F & CanPCI->frame_lenght; 
                     for(uint8_t i = 0; i < CanPCI->frame_lenght; i++){
                         *(CanPdu_Info->SduDataPtr + (i + 1)) = *(Can_payload + i);
                     }  
@@ -383,4 +511,8 @@ Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *Ca
     }
 
     return ret;
+}
+
+static Std_ReturnType CanTp_SendFlowControl( uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime ){
+    return E_OK;
 }
