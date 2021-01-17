@@ -46,6 +46,7 @@
 *.gcov
 *.gcda
 *.gcno
+*.html
 
 # Kernel Module Compile Results
 *.mod*
