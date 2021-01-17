@@ -98,7 +98,28 @@ void Test_Of_Custom_FFs(void){
 
 
 }
+void Test_Of_CanTp_Calculate_Available_Blocks(void){
 
+  uint16 retval;
+
+  CanTp_StateVariables.message_length = 8;
+  CanTp_StateVariables.sended_bytes = 0;
+
+  retval = CanTp_Calculate_Available_Blocks(18);
+  TEST_CHECK(retval == 2);
+  
+  CanTp_StateVariables.message_length = 14;
+  CanTp_StateVariables.sended_bytes = 0;
+
+  retval = CanTp_Calculate_Available_Blocks(18);
+  TEST_CHECK(retval == 2);
+
+  CanTp_StateVariables.message_length = 13;
+  CanTp_StateVariables.sended_bytes = 0;
+
+  retval = CanTp_Calculate_Available_Blocks(10);
+  TEST_CHECK(retval == 1);
+}
 // tests of static CanTp functions
 
 #include "stdio.h"
@@ -465,6 +486,7 @@ TEST_LIST = {
     { "Test_Of_CanTp_PrepareSegmenetedFrame", Test_Of_CanTp_PrepareSegmenetedFrame },
     { "Test_Of_Custom_FFs", Test_Of_Custom_FFs},
     { "Test_Of_CanTp_RxIndication", Test_Of_CanTp_RxIndication},
+    { "Test_Of_CanTp_Calculate_Available_Blocks", Test_Of_CanTp_Calculate_Available_Blocks},
     //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
     { NULL, NULL }                                      /* To musi być na końcu */
 };

@@ -103,13 +103,15 @@ static Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoT
 
 static void CanTp_Reset_Rx_State_Variables();
 static void CanTp_Resume();
-
+static uint16 CanTp_Calculate_Available_Blocks( uint16 buffer_size );
 //TODO
 static Std_ReturnType CanTp_SendFlowControl( uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime );
 static void CanTp_N_Br_Start();
 static void CanTp_N_Br_Stop();
 static void CanTp_N_Cr_Start();
 static void CanTp_N_Cr_Stop();
+static void CanTp_N_Ar_Start();
+static void CanTp_N_Ar_Stop();
 
 
 //static Std_ReturnType Can_Tp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload);
@@ -242,6 +244,7 @@ void CanTp_MainFunction ( void ){
 
     N_Br - odmierza czas między ramkami FlowControl 
     N_Cr - odmierza czas między ramkami CF
+    N_Ar - odmierza czas od wyslania ramki do potwierdzenia wyslania przez Driver
 
     timery N_Br i N_Cr mają dwa stany:
     - <timer>_active 
@@ -279,6 +282,14 @@ void CanTp_MainFunction ( void ){
     - jeżeli wystąpi N_Cr_timeout, to wywołujemy PduR_CanTpRxIndication ( RxPduId, E_NOT_OK) i na tym koniec transmisji [SWS_CanTp_00223], nalezy
     zatrzymac timer oraz zresetowac jego licznik [SWS_CanTp_00313]
 
+
+    Jeżeli N_Ar jest aktywny to:
+
+    -inkrementujemy go po każdym wywołaniu funkcji cantp_main
+
+    - jeżeli wystąpi N_Ar_timeout, to wywołujemy PduR_CanTpRxIndication ( RxPduId, E_NOT_OK) i na tym koniec transmisji [SWS_CanTp_00223], nalezy
+    zatrzymac timer oraz zresetowac jego licznik [SWS_CanTp_00313]
+
     To oczywiście nie wszystko, ale jest to na razie priorytetem, kolejne elementy zostaną dołożone później 
 
     poza tym do napisania funkcje (wszystkie typu void):
@@ -286,8 +297,11 @@ void CanTp_MainFunction ( void ){
     -startująca N_Br
     -zatrzymująca i resetująca N_Br 
 
-    -startująca C_Br
-    -zatrzymująca i resetująca C_Br 
+    -startująca N_Cr
+    -zatrzymująca i resetująca N_Cr 
+
+    -startująca N_Ar
+    -zatrzymująca i resetująca N_Ar 
 
 
     */
@@ -344,18 +358,15 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
                 [SWS_CanTp_00080] ⌈The available Rx buffer size is reported to the CanTp in the output pointer parameter of the PduR_CanTpStartOfReception() service. 
                 The available Rx buffer can be smaller than the expected N-SDU data length. 
             */
+            // UWAGA PRZYJMUJEMY UPROSZCZONĄ WERSJE, FF BEZ PAYLOADU!
+
             if( Buf_Status == BUFREQ_OK ) {
                 
                 // calculate block size to be send by FLOW_CONTROL
                 CanTp_StateVariables.message_length = Can_PCI.frame_lenght;
-                if( Can_PCI.frame_lenght <= 4095 ){
-                    CanTp_StateVariables.last_CF_length = (Can_PCI.frame_lenght - 6) % 7; 
-                } 
-                // longer frames
-                else{
-                    CanTp_StateVariables.last_CF_length = (Can_PCI.frame_lenght - 2) % 7; 
-                }
+                CanTp_StateVariables.last_CF_length = Can_PCI.frame_lenght % 7; 
                 
+                if( Can_PCI.frame_lenght )
                 current_block_size = Can_PCI.frame_lenght / 7; // czy musie byc wystarczajaco duzo miejsca w buforze na FF?
 
                 // send payload of FF
@@ -669,6 +680,8 @@ static Std_ReturnType CanTp_SendFlowControl( uint8 BlockSize, FlowControlStatus_
         a następnie ją wysłać przy użyciu 
         CanIf_Transmit()
 
+        po wysłaniu ramki należy uruchomić timer N_Ar
+
         Jeżeli którakolwiek z wyżej wymienionych funkcji zwróci E_NOT_OK, należy przerwać działanie funkcji i też zwrócić E_NOT_OK
         Jeżeli wszystko przejdzie bez bledow, należy zwrocick E_OK
 
@@ -696,3 +709,22 @@ static void CanTp_Reset_Rx_State_Variables(){
 static void CanTp_Resume(){
     CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
 }
+
+//
+
+static uint16 CanTp_Calculate_Available_Blocks( uint16 buffer_size ){
+
+    uint16 retval; 
+    uint16 remaining_bytes = CanTp_StateVariables.message_length - CanTp_StateVariables.sended_bytes;
+
+    if( buffer_size >= remaining_bytes){
+        retval = remaining_bytes / 7;
+        if( CanTp_StateVariables.message_length%7 > 0) retval++; 
+    }
+    else{
+        retval = buffer_size / 7;
+    }
+    
+    return retval;
+
+} 
