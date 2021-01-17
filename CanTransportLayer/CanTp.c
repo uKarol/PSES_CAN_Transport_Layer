@@ -238,6 +238,10 @@ void CanTp_MainFunction ( void ){
 
     /* TO DO:
 
+    -zadeklarować zmienne stanu dla timerów
+    -zadeklarować timeouty za pomocą definów
+    -zadeklarować liczniki jako zmienne globalne 
+
     funkcja ma odpowiadać za timeouty oraz za obslugę eventów od timera 
 
     mamy łącznie 3 timery w przypadku odbierania:
@@ -260,10 +264,9 @@ void CanTp_MainFunction ( void ){
     Jeżeli N_Br jest aktywny to:
 
     -z każdym wywołaniem funkcji CanTp_MainFunction nalezy wywołać funkcję PduR_CanTpCopyRxData() 
-    oraz sprawdzać jej parametry, wymaganie: [SWS_CanTp_00222] 
+    oraz sprawdzać jej parametry, oraz wysyłać funkcję CanTp_Calculate_Available_Blocks( uint16 buffer_size ), która obliczy ilość bloków wymaganie: [SWS_CanTp_00222] 
 
-    -jeżeli funkcja PduR_CanTpCopyRxData() zwróci bufor równy 7 lub więcej, ewentualnie mniejszy niż 7,
-    ale większy lub równy liczbie bajtów pozostałych do wysłania,
+    -jeżeli funkcja CanTp_Calculate_Available_Blocks() zwroci wartość większą od 0 
      to należy wysłać ramkę FlowControl z parametrem CTS [SWS_CanTp_00224], w tym wypadku 
      nalezy takze zatrzymac timer (przejsc do stanu not_active) oraz wyzerowac jego licznik, a także aktywować 
      timer N_Cr
