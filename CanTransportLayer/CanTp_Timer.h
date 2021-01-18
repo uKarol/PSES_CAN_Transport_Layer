@@ -55,7 +55,7 @@ typedef struct{
 void CanTp_TimerStart(CanTp_Timer_type *timer);
 void CanTp_TimerReset(CanTp_Timer_type *timer);
 Std_ReturnType CanTp_TimerTick(CanTp_Timer_type *timer);
-Std_ReturnType CanTp_TimerTimeout(CanTp_Timer_type *timer);
+Std_ReturnType CanTp_TimerTimeout(const CanTp_Timer_type *timer);
 
 
 

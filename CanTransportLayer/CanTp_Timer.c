@@ -125,7 +125,7 @@ Std_ReturnType CanTp_TimerTick(CanTp_Timer_type *timer){
   Return value : Std_ReturnType, Zwracana jest wartość E_OK jeżeli timer nie zwraca timeoutu. E_NOT_OK jest zwracany jeżeli licznik timera 
                 przekroczył zadaną watyość timeoutu. 
 **/
-Std_ReturnType CanTp_TimerTimeout(CanTp_Timer_type *timer){
+Std_ReturnType CanTp_TimerTimeout(const CanTp_Timer_type *timer){
     if(timer->counter >= timer->timeout){
         return E_NOT_OK;
     }
