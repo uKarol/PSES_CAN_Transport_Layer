@@ -478,6 +478,11 @@ void Test_Of_CanTp_RxIndication(void){
   TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
 
 }
+
+
+
+
+
 /*
   Lista testów - wpisz tutaj wszystkie funkcje które mają być wykonane jako testy.
 */

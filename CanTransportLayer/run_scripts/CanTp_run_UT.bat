@@ -1,9 +1,9 @@
 cd ..
-gcc UT_CanTp.c -o bins/UT_CanTp.exe
+gcc UT_CanTp.c CanTp_Timer.c -o bins/UT_CanTp.exe
 cd bins
 UT_CanTp.exe
 cd ..
-gcc -fprofile-arcs -ftest-coverage -g UT_CanTp.c -o bins/UT_CanTp.exe
+gcc -fprofile-arcs -ftest-coverage -g UT_CanTp.c CanTp_Timer.c -o bins/UT_CanTp.exe
 cd bins 
 UT_CanTp.exe
 cd ..
