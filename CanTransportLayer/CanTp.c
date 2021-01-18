@@ -42,7 +42,7 @@ typedef enum {
 typedef enum {
     CANTP_RX_WAIT,
     CANTP_RX_PROCESSING,
-    CANTP_END_OF_BLOCK
+    CANTP_RX_PROCESSING_SUSPENDED
 } CanTp_RxState_Type;
 
 typedef enum {
@@ -78,10 +78,10 @@ typedef struct{
 typedef struct{
     uint16 message_length;              //length of message
     uint16 expected_CF_SN;              //expected number of CF
-    uint16 sended_bytes;                // number of sended bytes 
-    uint16 last_CF_length;              // length of last CF
+    uint16 sended_bytes;                // number of sended bytes
     CanTp_RxState_Type CanTp_RxState;   // state (unused)
     PduIdType CanTp_Current_RxId;       // id of currently processed message
+    uint8 blocks_to_next_cts; 
 } CanTp_StateVariables_type;
 
 
@@ -90,7 +90,7 @@ typedef struct{
 \*====================================================================================================================*/
 CanTpState_Type CanTp_State; 
 CanTp_TxState_Type CanTp_TxState;
-CanTp_RxState_Type CanTp_RxState;
+//CanTp_RxState_Type CanTp_RxState;
 
 CanTp_StateVariables_type CanTp_StateVariables;
 
@@ -111,6 +111,9 @@ static Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoT
 static void CanTp_Reset_Rx_State_Variables();
 static void CanTp_Resume();
 static uint16 CanTp_Calculate_Available_Blocks( uint16 buffer_size );
+
+static void CanTp_set_blocks_to_next_cts( uint8 blocks );
+
 //TODO
 static Std_ReturnType CanTp_SendFlowControl( uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime );
 static void CanTp_N_Br_Start();
@@ -382,22 +385,16 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
     CanPCI_Type Can_PCI;            // PCI extracted from frame
     PduLengthType buffer_size;      // use when calling PduR callbacks
     BufReq_ReturnType Buf_Status;   // use when calling PduR callbacks
-    Std_ReturnType retval = E_OK;   // return 
     PduInfoType Extracted_Data;     // Payload extracted from PDU
-    PduIdType SegmentedFrameId = 0; // Id of frame 
     uint8 temp_data[8];             // array for temp payload
     uint16 current_block_size;      // currently processes block size (will be global)
-    uint16 message_size;            // size of unsegmented message
-    uint16 last_CF_size;            // size of last CF frame
-    uint16 bytes_sent;              // number of sent bytes
 
-    if( CanTp_RxState == CANTP_RX_WAIT){
+
+    if( CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT){
         
-        SegmentedFrameId = RxPduId; // setting of segmented frame id possible only in waiting state
+        CanTp_StateVariables.CanTp_Current_RxId = RxPduId; // setting of segmented frame id possible only in waiting state
 
         CanTp_GetPCI( PduInfoPtr, &Can_PCI );
-
-        //CanTp_AssertPCI( &Can_PCI ); conceptual
 
         // transmisja danych jeszcze nie wystartowała 
         // pierwsza ramka musi być SF albo FF, w przeciwnym wypadku mamy błąd
@@ -426,30 +423,23 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
                 
                 // calculate block size to be send by FLOW_CONTROL
                 CanTp_StateVariables.message_length = Can_PCI.frame_lenght;
-                CanTp_StateVariables.last_CF_length = Can_PCI.frame_lenght % 7; 
                 
                 if( Can_PCI.frame_lenght )
-                current_block_size = Can_PCI.frame_lenght / 7; // czy musie byc wystarczajaco duzo miejsca w buforze na FF?
+                current_block_size = CanTp_Calculate_Available_Blocks( buffer_size ); // czy musie byc wystarczajaco duzo miejsca w buforze na FF?
 
                 // send payload of FF
                 if( current_block_size > 0){    
-                    CanTp_SendFlowControl( current_block_size, FC_CTS, DEFAULT_ST );
-                    Extracted_Data.SduLength = Can_PCI.frame_lenght;
-                    // shorter frames
-                    if( Can_PCI.frame_lenght <= 4095 ){
-                        Extracted_Data.SduDataPtr = (PduInfoPtr->SduDataPtr+2);
-                    } 
-                    // longer frames
-                    else{
-                        Extracted_Data.SduDataPtr = (PduInfoPtr->SduDataPtr+6);
-                    } 
-                    Buf_Status = PduR_CanTpCopyRxData(RxPduId,  &Extracted_Data, &buffer_size);                   
+                    CanTp_SendFlowControl( current_block_size, FC_CTS, DEFAULT_ST );   
+                    CanTp_set_blocks_to_next_cts( current_block_size );
+                    CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING; // After Successfull Reception of FF, wait for Consecutive Frames
+              
                 }
                 else{
-                    CanTp_SendFlowControl( current_block_size, FC_WAIT, DEFAULT_ST );              
+                    CanTp_SendFlowControl( current_block_size, FC_WAIT, DEFAULT_ST );   
+                    CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED; // After Successfull Reception of FF, wait for Consecutive Frames
+           
                 }
-
-                CanTp_RxState = CANTP_RX_PROCESSING; // After Successfull Reception of FF, wait for Consecutive Frames
+                CanTp_StateVariables.expected_CF_SN = 1; 
             }
             else if ( Buf_Status == BUFREQ_OVFL ){
                 /*
@@ -457,7 +447,7 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
                 the CanTp module shall send a Flow Control N-PDU with overflow status (FC(OVFLW)) and abort the N-SDU reception. */
                 CanTp_SendFlowControl( current_block_size, FC_OVFLW, DEFAULT_ST );
                 CanTp_Reset_Rx_State_Variables();
-                CanTp_RxState = CANTP_RX_WAIT;
+                CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
             }
             else {
 
@@ -465,7 +455,7 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
 
         }
         else if( Can_PCI.frame_type == SF ){
-            CanTp_RxState = CANTP_RX_WAIT;
+            CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
             Buf_Status = PduR_CanTpStartOfReception( RxPduId, PduInfoPtr, Can_PCI.frame_lenght, &buffer_size);
 
             if( (Buf_Status == BUFREQ_OK)  ){
@@ -518,7 +508,7 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
             }           
 
         } 
-        else if( Can_PCI.frame_type == FF ){
+        else if( Can_PCI.frame_type == FC ){
             /* accept flow control if Tranmitter is waiting for it
             
              */
@@ -527,21 +517,104 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
         else
         {
             // in this state, CanTP expect only SF or FF, otherwise it is an error
-            CanTp_RxState = CANTP_RX_WAIT; 
-            retval = E_NOT_OK;
+            CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT; 
         } 
     }
 
-    else if( CanTp_RxState == CANTP_RX_PROCESSING){
+    else if( CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING){
         
         /*
-        in this state process only CF and FF, other frames are errors
+        in this state process only CF and FC, other frames are errors
 
         */
        if( Can_PCI.frame_type == CF ){
+           if(CanTp_StateVariables.CanTp_Current_RxId ==  RxPduId){ // sprawdz czy ID sie zgadza
 
+                if(CanTp_StateVariables.expected_CF_SN == Can_PCI.SN){ // sprawdz czy numer ramki sie zgadza                      
+                        Extracted_Data.SduLength = Can_PCI.frame_lenght;
+                        Extracted_Data.SduDataPtr = (PduInfoPtr->SduDataPtr+1);
+
+                        /*
+                            [SWS_CanTp_00269] ⌈After reception of each Consecutive Frame the CanTp module shall 
+                            call the PduR_CanTpCopyRxData() function with a PduInfo pointer 
+                            containing data buffer and data length:
+                        */
+
+                        Buf_Status = PduR_CanTpCopyRxData(RxPduId,  &Extracted_Data, &buffer_size);
+                        if( Buf_Status == BUFREQ_OK ){
+                            
+                            // jak przeszlo to sprawdzmy czy poszla juz cala ramka
+
+                            /*
+                            [SWS_CanTp_00277] ⌈With regard to FF N-PDU reception, the content of the 
+                            Flow Control N-PDU depends on the PduR_CanTpStartOfReception() service result.
+                            */
+
+                            CanTp_StateVariables.sended_bytes += Can_PCI.frame_lenght;
+                            CanTp_StateVariables.blocks_to_next_cts--;
+
+                            if( CanTp_StateVariables.sended_bytes == CanTp_StateVariables.message_length  ){ // poszlo wszystko
+                            /*
+                                [SWS_CanTp_00084] ⌈When the transport reception session is completed 
+                                (successfully or not) the CanTp module shall call the upper layer 
+                                notification service PduR_CanTpRxIndication().
+                            */
+                                PduR_CanTpRxIndication(CanTp_StateVariables.CanTp_Current_RxId, E_OK);
+                            }     
+                            else{ // 
+                                CanTp_StateVariables.expected_CF_SN++;
+                                current_block_size = CanTp_Calculate_Available_Blocks( buffer_size);
+
+                                if(current_block_size > 0){
+                                    
+                                    //send CTS if last cts block were sent
+
+                                    /*
+                                    [SWS_CanTp_00278] ⌈It is important to note that FC N-PDU will 
+                                    only be sent after every block, composed of a number BS 
+                                    (Block Size) of consecutive frames.
+                                    */
+
+                                    if(CanTp_StateVariables.blocks_to_next_cts == 0 ){
+                                        CanTp_SendFlowControl( current_block_size, FC_CTS, DEFAULT_ST );
+                                        CanTp_set_blocks_to_next_cts( current_block_size );
+                                    }
+                                    CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;        
+                                    // to do add timer
+                                }
+                                else{
+                                    CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED;
+                                    CanTp_SendFlowControl( current_block_size, FC_WAIT, DEFAULT_ST ); 
+                                }
+                            }
+
+                        }
+                        else{ 
+                            // problem z buforem 
+                           /* 
+                                [SWS_CanTp_00271] ⌈If the PduR_CanTpCopyRxData() returns BUFREQ_E_NOT_OK 
+                                after reception of a Consecutive Frame in a block the CanTp shall abort the 
+                                reception of N-SDU and notify the PduR module by calling the 
+                                PduR_CanTpRxIndication() with the result E_NOT_OK. 
+                           */
+                            PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                        }
+                }
+                else{ 
+                    // zly numer ramki np zgubiona ramka albo gorszy problem
+                    /*
+                    [SWS_CanTp_00314] ⌈The CanTp shall check the correctness of each SN received during a segmented reception. 
+                    In case of wrong SN received the CanTp module shall abort reception and notify the upper layer of this failure 
+                    by calling the indication function PduR_CanTpRxIndication() with the result E_NOT_OK.
+                    */
+                   PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                }
+           }
+           else {
+               // raczej blad, ale do sprawdzenia 
+           }
        }
-       else if( Can_PCI.frame_type == FF ){
+       else if( Can_PCI.frame_type == FC ){
 
        }
        else {
@@ -554,7 +627,7 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
         nadejscie jakiejkolwiek innej ramki traktowane jest jako blad, ale uwaga 
         nie jest jasne jak zachowac sie na wypadek bledu (niestety)
     */
-    else if( CanTp_RxState == CANTP_TX_PROCESSING_SUSPENDED){
+    else if( CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED){
             
         if( Can_PCI.frame_type == FF ){
 
@@ -761,7 +834,6 @@ static Std_ReturnType CanTp_SendFlowControl( uint8 BlockSize, FlowControlStatus_
 static void CanTp_Reset_Rx_State_Variables(){
     CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
     CanTp_StateVariables.expected_CF_SN = 0;
-    CanTp_StateVariables.last_CF_length = 0;
     CanTp_StateVariables.message_length = 0;
     CanTp_StateVariables.sended_bytes = 0;
 }
@@ -790,3 +862,11 @@ static uint16 CanTp_Calculate_Available_Blocks( uint16 buffer_size ){
     return retval;
 
 } 
+
+// funkcja ustawia ilosc blokow do wyslania nastepnej ramki CTS
+
+static void CanTp_set_blocks_to_next_cts( uint8 blocks ){
+
+    CanTp_StateVariables.blocks_to_next_cts = blocks;
+
+}

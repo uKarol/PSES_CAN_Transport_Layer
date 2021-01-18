@@ -407,7 +407,7 @@ void Test_Of_CanTp_RxIndication(void){
 
 // testujemy scenariusz ze strony 62
 // 9.2 Successful SF N-PDU reception
-  CanTp_RxState = CANTP_RX_WAIT;
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
 
   CanPCI.frame_lenght = 7;
   CanPCI.frame_type = SF;
@@ -430,7 +430,7 @@ void Test_Of_CanTp_RxIndication(void){
   TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
   
 
-  TEST_CHECK(CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
   TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 1); // this funtions shulod be called
   TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1); // this functio shlud be called
   TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 1);
@@ -441,7 +441,7 @@ void Test_Of_CanTp_RxIndication(void){
   CanTp_RxIndication (RxPduId, &PduInfoPtr );
 
   TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
-  TEST_CHECK(CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
   TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 2); // this funtions shulod be called
   TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1); // this functio shlud not be called
   TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); // this functio shlud not be called
@@ -451,7 +451,7 @@ void Test_Of_CanTp_RxIndication(void){
   CanTp_RxIndication (RxPduId, &PduInfoPtr );
 
   TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
-  TEST_CHECK(CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
   TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 3); // this funtions shulod be called
   TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1); // this functio shlud not be called
   TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); // this functio shlud not be called
@@ -471,7 +471,7 @@ void Test_Of_CanTp_RxIndication(void){
   TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
   
 
-  TEST_CHECK(CanTp_RxState == CANTP_RX_WAIT);                    // calling function with this argument shouldnt change internal state
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);                    // calling function with this argument shouldnt change internal state
   TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 4);   // this funtions shulod be called
   TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 2);         // this function should be called
   TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 3);       //
