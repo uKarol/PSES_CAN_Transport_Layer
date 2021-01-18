@@ -14,6 +14,7 @@
 #include "CanTp.h"
 #include "CanIf.h"
 #include "PdurCanTp.h"
+#include "CanTp_Timer.h"
 /*====================================================================================================================*\
     Makra lokalne
 \*====================================================================================================================*/
@@ -28,12 +29,7 @@
 
 #define DEFAULT_ST 0
 
-#define N_AR_TIMEOUT_VAL 100
-#define N_BR_TIMEOUT_VAL 100
-#define N_CR_TIMEOUT_VAL 100
-
 #define FC_WAIT_FRAME_CTR_MAX 10
-
 
 /*====================================================================================================================*\
     Typy lokalne
@@ -68,16 +64,6 @@ typedef enum {
     UNKNOWN = 4
     } frame_type_t;
 
-typedef enum{
-    TIMER_ACTIVE,
-    TIMER_NOT_ACTIVE
-} timer_state_t;
-
-typedef struct{
-    timer_state_t state;
-    uint32        counter; 
-    const uint32   timeout; 
-} CanTp_Timer_type;
 
 typedef struct{
     frame_type_t frame_type;
@@ -254,48 +240,6 @@ Std_ReturnType CanTp_ChangeParameter ( PduIdType id, TPParameterType parameter, 
 
 Std_ReturnType CanTp_ReadParameter ( PduIdType id, TPParameterType parameter, uint16* value );
 
-
-
-
-//Funkcje timera
-Std_ReturnType CanTp_TimerStart(CanTp_Timer_type *timer){
-    
-    timer->state = TIMER_ACTIVE;
-}
-
-void CanTp_TimerReset(CanTp_Timer_type *timer){
-    timer->state = TIMER_NOT_ACTIVE;
-    timer->counter = 0;
-}
-//
-//  Zwiększa licznik timera jeżeli jest on aktyrny. Jeżeli licznik osiągnął maksymalną możliwą wartość to zwracane jest E_NOT_OK
-//
-Std_ReturnType CanTp_TimerTick(CanTp_Timer_type *timer){
-    Std_ReturnType ret = E_OK;   
-    if(timer->state == TIMER_ACTIVE){
-        if(timer->counter < UINT32_MAX){
-            timer->counter ++;
-            //if(timer->counter >= timer->timeout){
-            //    ret = E_NOT_OK;
-            //}
-        }
-        else{
-            ret = E_NOT_OK;
-        }
-    }
-    return ret;
-}
-//
-// Funkcja sprawdza timout zadanego timera. W razie wystąpnienia timeout zwracane jest E_NOT_OK. W przeciwnym razie zwracane jest E_OK 
-//
-Std_ReturnType CanTp_TimerTimeout(CanTp_Timer_type *timer){
-    if(timer->counter >= timer->timeout){
-        return E_NOT_OK;
-    }
-    else{
-        return E_OK;
-    }
-}
 
 
 
