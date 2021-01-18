@@ -28,6 +28,12 @@
 
 #define DEFAULT_ST 0
 
+#define N_AR_TIMEOUT_VAL 100
+#define N_BR_TIMEOUT_VAL 100
+#define N_CR_TIMEOUT_VAL 100
+
+#define FC_WAIT_FRAME_CTR_MAX 10
+
 
 /*====================================================================================================================*\
     Typy lokalne
@@ -62,6 +68,17 @@ typedef enum {
     UNKNOWN = 4
     } frame_type_t;
 
+typedef enum{
+    TIMER_ACTIVE,
+    TIMER_NOT_ACTIVE
+} timer_state_t;
+
+typedef struct{
+    timer_state_t state;
+    uint32        counter; 
+    const uint32   timeout; 
+} CanTp_Timer_type;
+
 typedef struct{
     frame_type_t frame_type;
     uint32 frame_lenght; 
@@ -90,6 +107,10 @@ CanTp_TxState_Type CanTp_TxState;
 CanTp_RxState_Type CanTp_RxState;
 
 CanTp_StateVariables_type CanTp_StateVariables;
+
+CanTp_Timer_type N_Ar_timer = {TIMER_NOT_ACTIVE, 0, N_AR_TIMEOUT_VAL};
+CanTp_Timer_type N_Br_timer = {TIMER_NOT_ACTIVE, 0, N_BR_TIMEOUT_VAL};
+CanTp_Timer_type N_Cr_timer = {TIMER_NOT_ACTIVE, 0, N_CR_TIMEOUT_VAL};
 
 /*====================================================================================================================*\
     Zmienne lokalne (statyczne)
@@ -233,7 +254,59 @@ Std_ReturnType CanTp_ChangeParameter ( PduIdType id, TPParameterType parameter, 
 
 Std_ReturnType CanTp_ReadParameter ( PduIdType id, TPParameterType parameter, uint16* value );
 
+
+
+
+//Funkcje timera
+Std_ReturnType CanTp_TimerStart(CanTp_Timer_type *timer){
+    
+    timer->state = TIMER_ACTIVE;
+}
+
+void CanTp_TimerReset(CanTp_Timer_type *timer){
+    timer->state = TIMER_NOT_ACTIVE;
+    timer->counter = 0;
+}
+//
+//  Zwiększa licznik timera jeżeli jest on aktyrny. Jeżeli licznik osiągnął maksymalną możliwą wartość to zwracane jest E_NOT_OK
+//
+Std_ReturnType CanTp_TimerTick(CanTp_Timer_type *timer){
+    Std_ReturnType ret = E_OK;   
+    if(timer->state == TIMER_ACTIVE){
+        if(timer->counter < UINT32_MAX){
+            timer->counter ++;
+            //if(timer->counter >= timer->timeout){
+            //    ret = E_NOT_OK;
+            //}
+        }
+        else{
+            ret = E_NOT_OK;
+        }
+    }
+    return ret;
+}
+//
+// Funkcja sprawdza timout zadanego timera. W razie wystąpnienia timeout zwracane jest E_NOT_OK. W przeciwnym razie zwracane jest E_OK 
+//
+Std_ReturnType CanTp_TimerTimeout(CanTp_Timer_type *timer){
+    if(timer->counter >= timer->timeout){
+        return E_NOT_OK;
+    }
+    else{
+        return E_OK;
+    }
+}
+
+
+
 void CanTp_MainFunction ( void ){
+    static boolean N_Ar_timeout, N_Br_timeout, N_Cr_timeout;
+    static PduLengthType PduLenght;
+    static const PduInfoType   PduInfoConst = {NULL, NULL, 0};
+    static PduIdType RxPduId;
+    uint16 block_size;
+    uint8 separation_time;
+    static uint32 FC_Wait_frame_ctr = 0;
 
 
     /* TO DO:
@@ -278,36 +351,78 @@ void CanTp_MainFunction ( void ){
     wywołujemy PduR_CanTpRxIndication ( RxPduId, E_NOT_OK) i na tym koniec transmisji [SWS_CanTp_00223], nalezy
     zatrzymac timer oraz zresetowac jego licznik 
 
-    Jeżeli N_Cr jest aktywny to:
-
-    -inkrementujemy go po każdym wywołaniu funkcji cantp_main
-
-    - jeżeli wystąpi N_Cr_timeout, to wywołujemy PduR_CanTpRxIndication ( RxPduId, E_NOT_OK) i na tym koniec transmisji [SWS_CanTp_00223], nalezy
-    zatrzymac timer oraz zresetowac jego licznik [SWS_CanTp_00313]
-
-
-    Jeżeli N_Ar jest aktywny to:
-
-    -inkrementujemy go po każdym wywołaniu funkcji cantp_main
-
-    - jeżeli wystąpi N_Ar_timeout, to wywołujemy PduR_CanTpRxIndication ( RxPduId, E_NOT_OK) i na tym koniec transmisji [SWS_CanTp_00223], nalezy
-    zatrzymac timer oraz zresetowac jego licznik [SWS_CanTp_00313]
-
-    To oczywiście nie wszystko, ale jest to na razie priorytetem, kolejne elementy zostaną dołożone później 
-
-    poza tym do napisania funkcje (wszystkie typu void):
-
-    -startująca N_Br
-    -zatrzymująca i resetująca N_Br 
-
-    -startująca N_Cr
-    -zatrzymująca i resetująca N_Cr 
-
-    -startująca N_Ar
-    -zatrzymująca i resetująca N_Ar 
-
-
     */
+
+    // Inkrementacja wszystkich aktywnych timerów
+    CanTp_TimerTick(&N_Ar_timer);
+    CanTp_TimerTick(&N_Br_timer);
+    CanTp_TimerTick(&N_Cr_timer);
+
+
+   if(N_Br_timer.state == TIMER_ACTIVE){
+
+        //[SWS_CanTp_00222] 
+        //  
+        //
+       PduR_CanTpCopyRxData(RxPduId, &PduInfoConst, &PduLenght);
+       block_size = CanTp_Calculate_Available_Blocks(PduLenght);
+
+       if(block_size > 0){
+           //[SWS_CanTp_00224]
+            CanTp_SendFlowControl(block_size, FC_CTS, separation_time);
+
+           //Zresetowanie Timera N_Br:
+           CanTp_TimerReset(&N_Br_timer); 
+           //Start timera N_Cr:
+           CanTp_TimerStart(&N_Cr_timer);
+        }
+
+        //Obsługa timeouta
+        if(CanTp_TimerTimeout(&N_Br_timer)){
+            FC_Wait_frame_ctr ++;  //Inkrementacja licznika ramek WAIT 
+            if(FC_Wait_frame_ctr >= FC_WAIT_FRAME_CTR_MAX){
+                // [SWS_CanTp_00223]
+                PduR_CanTpRxIndication (RxPduId, E_NOT_OK);
+                //Zresetowanie Timera N_Br:
+                CanTp_TimerReset(&N_Br_timer); 
+            }
+            else{
+                // [SWS_CanTp_00341]
+                CanTp_SendFlowControl(block_size, FC_WAIT, separation_time);
+            }
+
+        }
+
+   }
+
+   //N_Cr jest w stanie aktywnym
+   if(N_Cr_timer.state == TIMER_ACTIVE){
+       //N_Cr zgłasza timeout 
+       if(CanTp_TimerTimeout(&N_Cr_timer) == E_NOT_OK){
+
+            // [SWS_CanTp_00223]
+            PduR_CanTpRxIndication(RxPduId, E_NOT_OK);
+
+            // [SWS_CanTp_00313] 
+            //Zatrzymanie i zresetowanie licznika
+            CanTp_TimerReset(&N_Cr_timer);
+       }
+   }
+
+   //N_Ar jest w stanie aktywnym
+   if(N_Ar_timer.state == TIMER_ACTIVE){
+       //N_Ar zgłasza timeout 
+       if(CanTp_TimerTimeout(&N_Ar_timer) == E_NOT_OK){
+
+            // [SWS_CanTp_00223]
+            PduR_CanTpRxIndication(RxPduId, E_NOT_OK);
+
+            // [SWS_CanTp_00313] 
+            //Zatrzymanie i zresetowanie licznika
+            CanTp_TimerReset(&N_Ar_timer);
+       }
+   }
+
 
 } 
 
