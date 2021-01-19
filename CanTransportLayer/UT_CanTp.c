@@ -375,6 +375,246 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
   TEST_CHECK(retv == E_NOT_OK);
 }
 
+void Test_Of_Main(){
+
+    /* 
+      dobra Panowie zdaję sobie sprawę ze ta część może być dość mocno popierdolona 
+      ale oczeuję od was że ogarniecie to po zobaczeniu tych kilku przykładów ;)
+      macie tutaj workflow
+    */
+
+   // przypominam że funcja main używa funkcji z pdu routera, dla których musimy zrobić FF
+   // zasadniczo interesuje nas funkcja PduR_CanTpCopyRxData
+   // przygotujmey tablice z wartosciami zwracanymi przez wskaznik
+    PduLengthType buffSize_array_local[10] = {0,0,0,0,10,0,0,0,9,0};
+    PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
+
+    // teraz pora przygotowac wartosci zwrocone przez te funkcje
+    BufReq_ReturnType BufferReturnVals[10] = { BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OVFL, BUFREQ_OK, BUFREQ_OK };
+    SET_RETURN_SEQ(PduR_CanTpCopyRxData, BufferReturnVals, 10);
+    PduR_CanTpCopyRxData_fake.custom_fake = PduR_CanTpCopyRxData_FF;
+
+
+    //Fake do przygotowania to RxIndication, tutaj prosta sprawa bo nic nie zwraca wiec nie nie trzeba kombinowac
+
+
+    // no i nasz fake gotowy ;)
+    // jedziemy dalej oto nasze testy do wykonania
+
+    // resetujemy wszystkie timery
+    CanTp_TimerReset(&N_Ar_timer);
+    CanTp_TimerReset(&N_Br_timer);
+    CanTp_TimerReset(&N_Cr_timer);
+    // TEST CASE 1 
+
+    /*
+      puszczamy maina dla nieaktywnych timerów, ma nie byc zadnej akcji
+    */
+
+    // nie uruchamiamy żadnego timera 
+    CanTp_MainFunction ();
+    CanTp_MainFunction ();
+    CanTp_MainFunction ();
+    CanTp_MainFunction ();
+
+    // stan timerow ma pozostac bez zmian 
+    TEST_CHECK(N_Ar_timer.counter == 0);
+    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+    TEST_CHECK(N_Br_timer.counter == 0);
+    TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE );
+    TEST_CHECK(N_Cr_timer.counter == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
+    // te funkcje nie powinny byc wywolane
+    TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 0); 
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 0);
+
+    // TEST CASE 2
+
+    /*
+    normalne dzialanie wszystkich timerow 
+    kazdy powinien cos policzyc
+    zaden nie powinien wyrzucic timeoutu
+
+    ze wzgledu na to ze nie mamy funkcje sendlowcontrol, 
+    nie musimy sprawdzac jej wywolania
+
+    chcemy aby tym razem funkcja calculate available blocks zwrocila 0
+
+    */
+    // parametry zostaly tak ustawione abysmy otrzymali ilosc blokow rowna 0
+    CanTp_StateVariables.message_length = 10;
+    CanTp_StateVariables.sended_bytes = 0;
+
+
+    // wszystkie timery aktywne 
+    CanTp_TimerStart(&N_Ar_timer);
+    CanTp_TimerStart(&N_Br_timer);
+    CanTp_TimerStart(&N_Cr_timer);
+    
+    CanTp_MainFunction ();
+    CanTp_MainFunction ();
+    CanTp_MainFunction ();
+    CanTp_MainFunction ();
+
+    // po czterokrotnym wywolaniu funkcji timery powinny wskazywac 4
+
+    TEST_CHECK(N_Ar_timer.counter == 4);
+    TEST_CHECK(N_Ar_timer.state == TIMER_ACTIVE );
+    TEST_CHECK(N_Br_timer.counter == 4);
+    TEST_CHECK(N_Br_timer.state == TIMER_ACTIVE );
+    TEST_CHECK(N_Cr_timer.counter == 4);
+    TEST_CHECK(N_Cr_timer.state == TIMER_ACTIVE );
+
+    // ze wzgledu na to ze N_Br jest aktywny, opowinien wywolac funkcje copy_data    
+    TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 4); 
+    //  nie ma timeoutu wiec ta funkcja nie powinna byc ruszana
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 0);
+
+    // TEST CASE 3 
+    /*
+
+      dokonczymy teraz testowanie N_Cr i N_Ar 
+      ze wzgledu na to ze n_Br jest bardziej skomplikowany nim zajmiemy sie potem
+
+
+    */ 
+
+   // blokujemy N_br
+    CanTp_TimerReset(&N_Br_timer);
+
+   // ustawiamy wartosc tak aby przy kolejnym wywolaniu poszedl timeout 
+   N_Ar_timer.counter = 99;
+   N_Cr_timer.counter = 99;
+
+   CanTp_MainFunction ();
+    // ze wzgledu na to ze N_Br jest nieaktywny, ilosc wywolan powinna zostac bez zmian  
+    TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 4); 
+    //  mamy 2 timeouty wiec funkcje powinna by wywolana 2 razy
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); 
+    // N_Br powinien byc nieruszony, bo zostal wczesniej zresetowany 
+    TEST_CHECK(N_Br_timer.counter == 0);
+    TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE );
+    // te timery powinny zostac zresetowane, bo osiagnely timeout 
+    TEST_CHECK(N_Ar_timer.counter == 0);
+    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+    TEST_CHECK(N_Cr_timer.counter == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
+
+
+    // dobra, to teraz najbardziej przejebane czyli katowanie N_Br
+
+  /*
+    TEST CASE 4 
+
+    tym razem timer N_Br jest aktywny i mamy dobry bufor 
+    powinien wyslac CTS i aktywowac N_CR
+
+  */
+  // uruchamiamy N_Br
+  CanTp_TimerStart(&N_Br_timer);
+  // parametry zostaly tak ustawione abysmy otrzymali ilosc blokow rowna 0
+    CanTp_StateVariables.message_length = 7;
+    CanTp_StateVariables.sended_bytes = 0;
+
+  // wolamy maina
+   CanTp_MainFunction ();
+    // copy data powinna byc wykonana 
+    TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 5); 
+    // ze wzgledu na to ze nie bylo przepelnienia wartosc ma byc bez zmian  
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); 
+       // N_Br powinien byc zresetowany 
+    TEST_CHECK(N_Br_timer.counter == 0);
+    TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE );
+    // N_Ar powinien byc nieruszony, bo zostal wczesniej zresetowany 
+    TEST_CHECK(N_Ar_timer.counter == 0);
+    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+    //// N_Br powinien byc aktywowany
+    TEST_CHECK(N_Cr_timer.counter == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_ACTIVE );
+
+  /*
+    TEST CASE 6
+
+    timer N_Br jest aktywny chcemy zrobić timeouta 
+    poeinna inkrementowac sie ilosc wysylanych ramek WAIT
+
+  */
+   // uruchamiamy N_Br
+  CanTp_TimerReset(&N_Cr_timer);
+  CanTp_TimerStart(&N_Br_timer);
+  // parametry zostaly tak ustawione abysmy otrzymali ilosc blokow rowna 0
+    CanTp_StateVariables.message_length = 10;
+    CanTp_StateVariables.sended_bytes = 0;
+    N_Br_timer.counter = 99;
+    FC_Wait_frame_ctr = 0;
+  // wolamy maina
+   CanTp_MainFunction ();
+    // copy data powinna byc wykonana 
+    TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 6); 
+    //  ilosc wywolan powinna zostac bez zmian  
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); 
+       // N_Br powinien byc dalej aktywny, licznik powinien sie wyzerowac
+    TEST_CHECK(N_Br_timer.counter == 0);
+    TEST_CHECK(N_Br_timer.state == TIMER_ACTIVE );
+    // N_Ar powinien byc nieruszony, bo zostal wczesniej zresetowany 
+    TEST_CHECK(N_Ar_timer.counter == 0);
+    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+    //// N_Cr powinien byc nieaktywny
+    TEST_CHECK(N_Cr_timer.counter == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
+    TEST_CHECK(FC_Wait_frame_ctr == 1);
+    /*
+    TEST CASE 7 
+    sprawdzamy działanie timera po wystapieniu timeouta 
+    timer ma normalnie liczyc 
+    wszystkie parametry maja byc tak jak poprzenio 
+    jedynie wartosc licznika inna
+    */
+
+
+    CanTp_MainFunction ();
+    // copy data powinna byc wykonana 
+    TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 7); 
+    //  ilosc wywolan powinna zostac bez zmian  
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); 
+       // N_Br powinien byc dalej aktywny
+    TEST_CHECK(N_Br_timer.counter == 1);
+    TEST_CHECK(N_Br_timer.state == TIMER_ACTIVE );
+    // N_Ar powinien byc nieruszony, bo zostal wczesniej zresetowany 
+    TEST_CHECK(N_Ar_timer.counter == 0);
+    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+    //// N_Cr powinien byc nieaktywny
+    TEST_CHECK(N_Cr_timer.counter == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
+    TEST_CHECK(FC_Wait_frame_ctr == 1);
+
+        /*
+    TEST CASE 8 
+    sprawdzamy działanie timera po wystapieniu timeouta 
+    wyslano rowniez maksymalna ilosc ramek fc wait
+    powinien wystapic blad
+    odbiranie ma zostac przerwane
+    */
+
+    N_Br_timer.counter = 99;
+    FC_Wait_frame_ctr = 9;
+    CanTp_MainFunction ();
+    // copy data powinna byc wykonana 
+    TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 8); 
+    //  ilosc wywolan powinna zostac bez zmian  
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 3); 
+       // N_Br powinien byc dalej aktywny
+    TEST_CHECK(N_Br_timer.counter == 0);
+    TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE );
+    // N_Ar powinien byc nieruszony, bo zostal wczesniej zresetowany 
+    TEST_CHECK(N_Ar_timer.counter == 0);
+    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+    //// N_Cr powinien byc nieaktywny
+    TEST_CHECK(N_Cr_timer.counter == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
+    TEST_CHECK(FC_Wait_frame_ctr == 0);
+}
+
 //test of CanTp_RxIndication
 void Test_Of_CanTp_RxIndication(void){
 
@@ -492,6 +732,7 @@ TEST_LIST = {
     { "Test_Of_Custom_FFs", Test_Of_Custom_FFs},
     { "Test_Of_CanTp_RxIndication", Test_Of_CanTp_RxIndication},
     { "Test_Of_CanTp_Calculate_Available_Blocks", Test_Of_CanTp_Calculate_Available_Blocks},
+    { "Test_Of_Main", Test_Of_Main},
     //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
     { NULL, NULL }                                      /* To musi być na końcu */
 };

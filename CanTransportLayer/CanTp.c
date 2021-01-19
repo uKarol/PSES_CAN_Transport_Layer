@@ -98,6 +98,8 @@ CanTp_Timer_type N_Ar_timer = {TIMER_NOT_ACTIVE, 0, N_AR_TIMEOUT_VAL};
 CanTp_Timer_type N_Br_timer = {TIMER_NOT_ACTIVE, 0, N_BR_TIMEOUT_VAL};
 CanTp_Timer_type N_Cr_timer = {TIMER_NOT_ACTIVE, 0, N_CR_TIMEOUT_VAL};
 
+uint32 FC_Wait_frame_ctr;
+
 /*====================================================================================================================*\
     Zmienne lokalne (statyczne)
 \*====================================================================================================================*/
@@ -253,7 +255,7 @@ void CanTp_MainFunction ( void ){
     static PduIdType RxPduId;
     uint16 block_size;
     uint8 separation_time;
-    static uint32 FC_Wait_frame_ctr = 0;
+    
 
 
     /* TO DO:
@@ -327,11 +329,13 @@ void CanTp_MainFunction ( void ){
         //Obsługa timeouta
         if(CanTp_TimerTimeout(&N_Br_timer)){
             FC_Wait_frame_ctr ++;  //Inkrementacja licznika ramek WAIT 
+            N_Br_timer.counter = 0;
             if(FC_Wait_frame_ctr >= FC_WAIT_FRAME_CTR_MAX){
                 // [SWS_CanTp_00223]
                 PduR_CanTpRxIndication (RxPduId, E_NOT_OK);
                 //Zresetowanie Timera N_Br:
                 CanTp_TimerReset(&N_Br_timer); 
+                FC_Wait_frame_ctr = 0;
             }
             else{
                 // [SWS_CanTp_00341]
