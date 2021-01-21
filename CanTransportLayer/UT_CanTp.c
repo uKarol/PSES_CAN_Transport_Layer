@@ -122,6 +122,31 @@ void Test_Of_CanTp_Calculate_Available_Blocks(void){
 }
 // tests of static CanTp functions
 
+void Test_Of_CanTp_set_blocks_to_next_cts( void ){
+
+  CanTp_set_blocks_to_next_cts( 100 );
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts = 100);
+}
+
+void Test_Of_CanTp_Resume(void){
+    
+    CanTp_Resume();
+    CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING;
+
+}
+
+void Test_Of_CanTp_Reset_Rx_State_Variables(){     
+
+    CanTp_Reset_Rx_State_Variables();
+    TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+    TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+    TEST_CHECK(CanTp_StateVariables.message_length == 0);
+    TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+    TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+    TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 0);
+
+}
+
 #include "stdio.h"
 /**
   @brief Test dodawania
@@ -616,6 +641,9 @@ void Test_Of_Main(){
 }
 
 //test of CanTp_RxIndication
+
+///< ONLY SF>
+
 void Test_Of_CanTp_RxIndication(void){
 
 // declare test variables
@@ -719,9 +747,92 @@ void Test_Of_CanTp_RxIndication(void){
 
 }
 
+void Test_Of_CanTp_RxIndication_FF(void){
 
+// declare test variables
+  int i;
+  PduIdType  RxPduId = 1;
 
+  PduInfoType PduInfoPtr;
+  CanPCI_Type CanPCI;
 
+// configure FF
+
+  RESET_FAKE(PduR_CanTpStartOfReception);
+  RESET_FAKE(PduR_CanTpCopyRxData); 
+// PDU Router FF
+  PduLengthType buffSize_array_local[10] = {7,1,7,7,7,6,7,8,9,0};
+  PduR_CanTpStartOfReception_buffSize_array = buffSize_array_local;
+  PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
+
+    
+  BufReq_ReturnType PduR_CanTpStartOfReception_ReturnVals[10] = { BUFREQ_OK, BUFREQ_OK, BUFREQ_OVFL, BUFREQ_E_NOT_OK}; 
+  BufReq_ReturnType PduR_CanTpCopyRxData_ReturnVals[10] =       { BUFREQ_OK, BUFREQ_E_NOT_OK}; 
+  SET_RETURN_SEQ(PduR_CanTpStartOfReception, PduR_CanTpStartOfReception_ReturnVals, 4);
+  PduR_CanTpStartOfReception_fake.custom_fake =  PduR_CanTpStartOfReception_FF;
+
+  SET_RETURN_SEQ(PduR_CanTpCopyRxData, PduR_CanTpCopyRxData_ReturnVals, 2);
+  PduR_CanTpCopyRxData_fake.custom_fake = PduR_CanTpCopyRxData_FF;
+
+// wszystk idzie ok
+
+  CanTp_Reset_Rx_State_Variables();
+
+  CanPCI.frame_lenght = 100;
+  CanPCI.frame_type = FF;
+  uint8 payload[8] = "xxx"; // w wypadku FF payload nie ma znaczenia
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 100); // sprawdz argumenty
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 1);
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 1);
+  TEST_CHECK(CanTp_StateVariables.message_length == 100);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1);
+
+// za maly bufor
+
+  CanTp_Reset_Rx_State_Variables();
+/*
+  CanPCI.frame_lenght = 100;
+  CanPCI.frame_type = FF;
+  uint8 payload[8] = "xxx"; // w wypadku FF payload nie ma znaczenia
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );*/
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 100); // sprawdz argumenty
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 1);
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1);
+
+  CanTp_Reset_Rx_State_Variables();
+
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 100); // sprawdz argumenty
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+
+  CanTp_Reset_Rx_State_Variables();
+
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 100); // sprawdz argumenty
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+
+  // send FF when is unexpected
+  CanTp_Reset_Rx_State_Variables();
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+}
 
 /*
   Lista testów - wpisz tutaj wszystkie funkcje które mają być wykonane jako testy.
@@ -733,6 +844,10 @@ TEST_LIST = {
     { "Test_Of_CanTp_RxIndication", Test_Of_CanTp_RxIndication},
     { "Test_Of_CanTp_Calculate_Available_Blocks", Test_Of_CanTp_Calculate_Available_Blocks},
     { "Test_Of_Main", Test_Of_Main},
+    { "Test_Of_CanTp_set_blocks_to_next_cts", Test_Of_CanTp_set_blocks_to_next_cts},
+    { "Test_Of_CanTp_Resume", Test_Of_CanTp_Resume},
+    { "Test_Of_CanTp_Reset_Rx_State_Variables", Test_Of_CanTp_Reset_Rx_State_Variables},
+    { "Test_Of_CanTp_RxIndication_FF", Test_Of_CanTp_RxIndication_FF},
     //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
     { NULL, NULL }                                      /* To musi być na końcu */
 };

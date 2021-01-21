@@ -428,7 +428,6 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
                 // calculate block size to be send by FLOW_CONTROL
                 CanTp_StateVariables.message_length = Can_PCI.frame_lenght;
                 
-                if( Can_PCI.frame_lenght )
                 current_block_size = CanTp_Calculate_Available_Blocks( buffer_size ); // czy musie byc wystarczajaco duzo miejsca w buforze na FF?
 
                 // send payload of FF
@@ -439,6 +438,7 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
               
                 }
                 else{
+                    CanTp_set_blocks_to_next_cts( current_block_size );
                     CanTp_SendFlowControl( current_block_size, FC_WAIT, DEFAULT_ST );   
                     CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED; // After Successfull Reception of FF, wait for Consecutive Frames
            
@@ -612,10 +612,12 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
                     by calling the indication function PduR_CanTpRxIndication() with the result E_NOT_OK.
                     */
                    PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                   CanTp_Reset_Rx_State_Variables();
                 }
            }
            else {
                // raczej blad, ale do sprawdzenia 
+               CanTp_Reset_Rx_State_Variables();
            }
        }
        else if( Can_PCI.frame_type == FC ){
@@ -623,6 +625,8 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
        }
        else {
            // uwaga na razie niejasne 
+           CanTp_Reset_Rx_State_Variables();
+           
        }
     }
     /* uwaga na razie nie jestem pewny czy ten stan ma sens, mozliwe ze zostanie skasowany
@@ -638,6 +642,7 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
        }
        else {
            // uwaga na razie niejasne 
+           CanTp_Reset_Rx_State_Variables();
        }
 
 
@@ -840,6 +845,8 @@ static void CanTp_Reset_Rx_State_Variables(){
     CanTp_StateVariables.expected_CF_SN = 0;
     CanTp_StateVariables.message_length = 0;
     CanTp_StateVariables.sended_bytes = 0;
+    CanTp_StateVariables.blocks_to_next_cts = 0;
+    CanTp_StateVariables.CanTp_Current_RxId = 0;
 }
 
 // resume CanTp
