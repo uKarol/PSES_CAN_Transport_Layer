@@ -98,6 +98,10 @@ CanTp_Timer_type N_Ar_timer = {TIMER_NOT_ACTIVE, 0, N_AR_TIMEOUT_VAL};
 CanTp_Timer_type N_Br_timer = {TIMER_NOT_ACTIVE, 0, N_BR_TIMEOUT_VAL};
 CanTp_Timer_type N_Cr_timer = {TIMER_NOT_ACTIVE, 0, N_CR_TIMEOUT_VAL};
 
+CanTp_Timer_type N_As_timer = {TIMER_NOT_ACTIVE, 0, N_AS_TIMEOUT_VAL};
+CanTp_Timer_type N_Bs_timer = {TIMER_NOT_ACTIVE, 0, N_BS_TIMEOUT_VAL};
+
+
 uint32 FC_Wait_frame_ctr;
 
 /*====================================================================================================================*\
@@ -116,14 +120,16 @@ static uint16 CanTp_Calculate_Available_Blocks( uint16 buffer_size );
 
 static void CanTp_set_blocks_to_next_cts( uint8 blocks );
 
+static CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* payload, uint32 size);
+static CanTp_SendFirstFrame(PduIdType id, uint32 message_lenght);
+static CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint32 size);
+
+
 //TODO
 static Std_ReturnType CanTp_SendFlowControl( uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime );
-static void CanTp_N_Br_Start();
-static void CanTp_N_Br_Stop();
-static void CanTp_N_Cr_Start();
-static void CanTp_N_Cr_Stop();
-static void CanTp_N_Ar_Start();
-static void CanTp_N_Ar_Stop();
+
+
+
 
 
 //static Std_ReturnType Can_Tp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload);
@@ -310,7 +316,7 @@ void CanTp_MainFunction ( void ){
 
 
    if(N_Br_timer.state == TIMER_ACTIVE){
-       
+
 // 1   - Sprawdzenie i obsługa wartości zwronej PduR_CanTpCopyRxData
         //[SWS_CanTp_00222] 
        BufReq_State = PduR_CanTpCopyRxData(CanTp_StateVariables.CanTp_Current_RxId, &PduInfoConst, &PduLenght);
@@ -903,4 +909,91 @@ static void CanTp_set_blocks_to_next_cts( uint8 blocks ){
 
     CanTp_StateVariables.blocks_to_next_cts = blocks;
 
+}
+
+
+
+static CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint32 size){
+    PduInfoType PduInfo;
+    CanPCI_Type CanPCI = {SF, size, 0, 0, 0, 0};
+    Std_ReturnType ret = E_OK;
+
+    //Przygotowanie PDU
+    CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
+    
+    //Sprawdzamy czy transmisja odbyła się poprawnie
+    if(CanIf_Transmit(id , &PduInfo) == E_OK ){
+        //Startowanie timera N_As
+        CanTp_TimerStart(&N_As_timer);
+    }
+    else{
+        /*
+            [SWS_CanTp_00343]  CanTp shall terminate the current  transmission connection 
+             when CanIf_Transmit() returns E_NOT_OK when transmitting an SF, FF, of CF ()
+        */
+
+        //Wywołanie z argumentem E_NOT_OK
+        PduR_CanTpTxConfirmation(id, E_NOT_OK);
+
+        //Ustawnienie E_NOT_OK jako wartość zwrotną
+        ret = E_NOT_OK;
+    }
+
+    return ret;
+}
+
+
+static CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* payload, uint32 size){
+    PduInfoType PduInfo;
+    CanPCI_Type CanPCI = {CF, size, SN, 0, 0, 0};
+    Std_ReturnType ret = E_OK;
+    //Przygotowanie PDU
+    CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
+    
+    //Sprawdzamy czy transmisja odbyła się poprawnie
+    if(CanIf_Transmit(id , &PduInfo) == E_OK ){
+        //Startowanie timera N_As
+        CanTp_TimerStart(&N_As_timer);
+    }
+    else{
+        /*
+            [SWS_CanTp_00343]  CanTp shall terminate the current  transmission connection 
+             when CanIf_Transmit() returns E_NOT_OK when transmitting an SF, FF, of CF ()
+        */
+        //Wywołanie z argumentem E_NOT_OK
+        PduR_CanTpTxConfirmation(id, E_NOT_OK);
+        //Ustawnienie E_NOT_OK jako wartość zwrotną
+        ret = E_NOT_OK;
+    }
+
+    return ret;
+}
+
+static CanTp_SendFirstFrame(PduIdType id, uint32 message_lenght){
+    PduInfoType PduInfo;
+    CanPCI_Type CanPCI = {FF, message_lenght, 0, 0, 0, 0};
+    uint8 payload[8] = {0,0,0,0,0,0,0,0};
+    Std_ReturnType ret = E_OK;
+
+    //Przygotowanie PDU
+    CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
+    
+    //Sprawdzamy czy transmisja odbyła się poprawnie
+    if(CanIf_Transmit(id, &PduInfo) == E_OK ){
+        //Startowanie timera N_As i N_Bs
+        CanTp_TimerStart(&N_As_timer);
+        CanTp_TimerStart(&N_Bs_timer);
+    }
+    else{
+        /*
+            [SWS_CanTp_00343]  CanTp shall terminate the current  transmission connection 
+             when CanIf_Transmit() returns E_NOT_OK when transmitting an SF, FF, of CF ()
+        */
+        //Wywołanie z argumentem E_NOT_OK
+        PduR_CanTpTxConfirmation(id, E_NOT_OK);
+        //Ustawnienie E_NOT_OK jako wartość zwrotną
+        ret = E_NOT_OK;
+    }
+
+    return ret;
 }
