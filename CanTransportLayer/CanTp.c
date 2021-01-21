@@ -252,7 +252,7 @@ void CanTp_MainFunction ( void ){
     static boolean N_Ar_timeout, N_Br_timeout, N_Cr_timeout;
     static PduLengthType PduLenght;
     static const PduInfoType   PduInfoConst = {NULL, NULL, 0};
-    static PduIdType RxPduId;
+  //  static PduIdType RxPduId;
     uint16 block_size;
     uint8 separation_time;
     
@@ -313,7 +313,7 @@ void CanTp_MainFunction ( void ){
         //[SWS_CanTp_00222] 
         //  
         //
-       PduR_CanTpCopyRxData(RxPduId, &PduInfoConst, &PduLenght);
+       PduR_CanTpCopyRxData(CanTp_StateVariables.CanTp_Current_RxId, &PduInfoConst, &PduLenght);
        block_size = CanTp_Calculate_Available_Blocks(PduLenght);
 
        if(block_size > 0){
@@ -332,7 +332,7 @@ void CanTp_MainFunction ( void ){
             N_Br_timer.counter = 0;
             if(FC_Wait_frame_ctr >= FC_WAIT_FRAME_CTR_MAX){
                 // [SWS_CanTp_00223]
-                PduR_CanTpRxIndication (RxPduId, E_NOT_OK);
+                PduR_CanTpRxIndication (CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
                 //Zresetowanie Timera N_Br:
                 CanTp_TimerReset(&N_Br_timer); 
                 FC_Wait_frame_ctr = 0;
@@ -352,7 +352,7 @@ void CanTp_MainFunction ( void ){
        if(CanTp_TimerTimeout(&N_Cr_timer) == E_NOT_OK){
 
             // [SWS_CanTp_00223]
-            PduR_CanTpRxIndication(RxPduId, E_NOT_OK);
+            PduR_CanTpRxIndication(CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
 
             // [SWS_CanTp_00313] 
             //Zatrzymanie i zresetowanie licznika
@@ -366,7 +366,7 @@ void CanTp_MainFunction ( void ){
        if(CanTp_TimerTimeout(&N_Ar_timer) == E_NOT_OK){
 
             // [SWS_CanTp_00223]
-            PduR_CanTpRxIndication(RxPduId, E_NOT_OK);
+            PduR_CanTpRxIndication(CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
 
             // [SWS_CanTp_00313] 
             //Zatrzymanie i zresetowanie licznika
