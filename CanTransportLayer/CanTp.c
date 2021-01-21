@@ -255,6 +255,7 @@ void CanTp_MainFunction ( void ){
   //  static PduIdType RxPduId;
     uint16 block_size;
     uint8 separation_time;
+    BufReq_ReturnType BufReq_State; 
     
 
 
@@ -309,41 +310,61 @@ void CanTp_MainFunction ( void ){
 
 
    if(N_Br_timer.state == TIMER_ACTIVE){
-
+       
+// 1   - Sprawdzenie i obsługa wartości zwronej PduR_CanTpCopyRxData
         //[SWS_CanTp_00222] 
-        //  
-        //
-       PduR_CanTpCopyRxData(CanTp_StateVariables.CanTp_Current_RxId, &PduInfoConst, &PduLenght);
-       block_size = CanTp_Calculate_Available_Blocks(PduLenght);
+       BufReq_State = PduR_CanTpCopyRxData(CanTp_StateVariables.CanTp_Current_RxId, &PduInfoConst, &PduLenght);
 
-       if(block_size > 0){
-           //[SWS_CanTp_00224]
-            CanTp_SendFlowControl(block_size, FC_CTS, separation_time);
+       if(BufReq_State == BUFREQ_E_NOT_OK){
+           // [SWS_CanTp_00271]
+           PduR_CanTpRxIndication(CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+       }
+       else{
+            block_size = CanTp_Calculate_Available_Blocks(PduLenght);
+            if(block_size > 0){
 
-           //Zresetowanie Timera N_Br:
-           CanTp_TimerReset(&N_Br_timer); 
-           //Start timera N_Cr:
-           CanTp_TimerStart(&N_Cr_timer);
-        }
+// 3            Wywolanie funkcji CanTp_Set_blocks... i CanTp_Resume jeżeli block_size > 0
+                CanTp_set_blocks_to_next_cts(block_size);
+                CanTp_Resume();
 
-        //Obsługa timeouta
-        if(CanTp_TimerTimeout(&N_Br_timer)){
-            FC_Wait_frame_ctr ++;  //Inkrementacja licznika ramek WAIT 
-            N_Br_timer.counter = 0;
-            if(FC_Wait_frame_ctr >= FC_WAIT_FRAME_CTR_MAX){
-                // [SWS_CanTp_00223]
-                PduR_CanTpRxIndication (CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
-                //Zresetowanie Timera N_Br:
-                CanTp_TimerReset(&N_Br_timer); 
-                FC_Wait_frame_ctr = 0;
+
+                //[SWS_CanTp_00224]
+                if(CanTp_SendFlowControl(block_size, FC_CTS, separation_time) == E_NOT_OK){
+ // 4   - resetowanie recievera jeżeli SendFlowControl zwróci błąd                   
+                    CanTp_Reset_Rx_State_Variables();
+                }
+                else{
+                    //Zresetowanie Timera N_Br:
+                    CanTp_TimerReset(&N_Br_timer); 
+                }
+
+// 5            - Usuniecie startowania timera
+                //Start timera N_Cr:
+                //CanTp_TimerStart(&N_Cr_timer);
+           
             }
-            else{
-                // [SWS_CanTp_00341]
-                CanTp_SendFlowControl(block_size, FC_WAIT, separation_time);
+            //Obsługa timeouta
+            if(CanTp_TimerTimeout(&N_Br_timer)){
+                FC_Wait_frame_ctr ++;  //Inkrementacja licznika ramek WAIT 
+                N_Br_timer.counter = 0;
+                if(FC_Wait_frame_ctr >= FC_WAIT_FRAME_CTR_MAX){
+                    // [SWS_CanTp_00223]
+// 2- reset recievera  --Zbyt duza ilość ramek FC_WAIT, 
+                    CanTp_Reset_Rx_State_Variables();
+                    PduR_CanTpRxIndication (CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                    //Zresetowanie Timera N_Br:
+                    CanTp_TimerReset(&N_Br_timer); 
+                    FC_Wait_frame_ctr = 0;
+                }
+                else{
+                    // [SWS_CanTp_00341]
+                    if(CanTp_SendFlowControl(block_size, FC_WAIT, separation_time) == E_NOT_OK){
+// 4   - resetowanie recievera jeżeli SendFlowControl zwróci błąd
+                        CanTp_Reset_Rx_State_Variables();
+                    }
+                }
             }
-
         }
-
    }
 
    //N_Cr jest w stanie aktywnym
@@ -351,6 +372,8 @@ void CanTp_MainFunction ( void ){
        //N_Cr zgłasza timeout 
        if(CanTp_TimerTimeout(&N_Cr_timer) == E_NOT_OK){
 
+// 2- reset recievera  --Zbyt duza ilość ramek FC_WAIT, 
+            CanTp_Reset_Rx_State_Variables();
             // [SWS_CanTp_00223]
             PduR_CanTpRxIndication(CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
 
@@ -365,6 +388,8 @@ void CanTp_MainFunction ( void ){
        //N_Ar zgłasza timeout 
        if(CanTp_TimerTimeout(&N_Ar_timer) == E_NOT_OK){
 
+// 2- reset recievera  --Zbyt duza ilość ramek FC_WAIT, 
+            CanTp_Reset_Rx_State_Variables();
             // [SWS_CanTp_00223]
             PduR_CanTpRxIndication(CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
 
@@ -373,8 +398,6 @@ void CanTp_MainFunction ( void ){
             CanTp_TimerReset(&N_Ar_timer);
        }
    }
-
-
 } 
 
 // callbacks
