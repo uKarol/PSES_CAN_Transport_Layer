@@ -922,25 +922,42 @@ void Test_Of_CanTp_RxIndication_FF(void){
 
 
 
-void Test_Of_CanTp_SendSingleFrame(void){
+void Test_Of_CanTp_SendConsecutiveFrame(void){
   Std_ReturnType ret; 
-  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_NOT_OK, E_NOT_OK};
+  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_OK, E_NOT_OK};
   PduIdType PduId = 0xF1A7;
   uint8 payload[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
-  uint32 size = 8;
+  uint32 size = 7;
   uint8 SN = 0x1;
+  //Create and Fill PduInfo with PrepareSegmentedFrame function
+  PduInfoType PduInfo;
+  uint8 SduDataPtr[8];
+  uint8 *MetaDataPtr;
+  PduInfo.MetaDataPtr = MetaDataPtr;
+  PduInfo.SduDataPtr = SduDataPtr;
+  CanPCI_Type CanPCI = {CF, size, SN, 0, 0, 0};
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
 
   //Ustawienie sekwencji wartości zwracanych przez CanIF_Transmitt
   SET_RETURN_SEQ(CanIf_Transmit, CanIf_Transmit_retv, 3);
-  
-  //TEST 1: Transmisja CanIf przebiega pomyślnie
+
+  //TEST1: Sprawdzenie czy dane wysyłane przez CanIf pokrywają się 
+  // Z danymi dostarczonymi do funkcji
+  ret = CanTp_SendConsecutiveFrame(PduId, SN,  payload, size);
+  // Sprawdzenie czy funcja została wywołana
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1);
+  TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
+  //Porównujemy pierwszy bajt z SduDataPtr. W przypadku CF pozostałe bajty są bez znaczenia
+  TEST_CHECK(CanIf_Transmit_fake.arg1_val->SduDataPtr[0] == PduInfo.SduDataPtr[0]);
+
+  //TEST 2: Transmisja CanIf przebiega pomyślnie
   //Wyzerowanie licznika N_As_timer
   CanTp_TimerReset(&N_As_timer);
   //Wywołanie funkcji
   ret = CanTp_SendConsecutiveFrame(PduId, SN,  payload, size);
   TEST_CHECK(ret == E_OK);
   //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_OK
-  TEST_CHECK(CanIf_Transmit_fake.call_count == 1);
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 2);
   //Sprawdzienie argumentów wywołania
   TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
   //Timer N_AS powinien zostać aktywowany:
@@ -948,7 +965,7 @@ void Test_Of_CanTp_SendSingleFrame(void){
   //CanTpTxConfirmation nie powinna być wywołana
   TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 0);
 
-  //TEST 2: Transmisja CanIf zwraca E_NOT_OK
+  //TEST 3: Transmisja CanIf zwraca E_NOT_OK
   //Zmiana ID
   PduId = 0x0101;
   //Wyzerowanie licznika N_As_timer
@@ -956,9 +973,8 @@ void Test_Of_CanTp_SendSingleFrame(void){
   //Wywołanie funkcji, powinna zwrócić E_NOT_OK
   ret = CanTp_SendConsecutiveFrame(PduId, SN, payload, size);
   TEST_CHECK(ret == E_NOT_OK);
-
   //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_NOT_OK
-  TEST_CHECK(CanIf_Transmit_fake.call_count == 2);
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 3);
   //Sprawdzienie argumentów wywołania
   TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
   //Timer N_AS nie powinien zostać aktywowany:
@@ -969,24 +985,39 @@ void Test_Of_CanTp_SendSingleFrame(void){
   TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg1_val == E_NOT_OK);
 }
 
-void Test_Of_CanTp_SendConsecutiveFrame(void){
+void Test_Of_CanTp_SendSingleFrame(void){
   Std_ReturnType ret; 
-  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_NOT_OK, E_NOT_OK};
+  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_OK, E_NOT_OK};
   PduIdType PduId = 0xF1A7;
   uint8 payload[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
-  uint32 size = 8;
-
+  uint32 size = 7;
+  //Create and Fill PduInfo with PrepareSegmentedFrame function
+  PduInfoType PduInfo;
+  uint8 SduDataPtr[8];
+  uint8 *MetaDataPtr;
+  PduInfo.MetaDataPtr = MetaDataPtr;
+  PduInfo.SduDataPtr = SduDataPtr;
+  CanPCI_Type CanPCI = {SF, size, 0, 0, 0, 0};
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
   //Ustawienie sekwencji wartości zwracanych przez CanIF_Transmitt
   SET_RETURN_SEQ(CanIf_Transmit, CanIf_Transmit_retv, 3);
   
-  //TEST 1: Transmisja CanIf przebiega pomyślnie
+  //TEST1: Sprawdzenie czy dane wysyłane przez CanIf pokrywają się 
+  // Z danymi dostarczonymi do funkcji
+  ret = CanTp_SendSingleFrame(PduId, payload, size);
+  // Sprawdzenie czy funcja została wywołana
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1);
+  TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
+  TEST_CHECK(memcmp(CanIf_Transmit_fake.arg1_val->SduDataPtr, PduInfo.SduDataPtr, 8) == 0);
+  
+  //TEST 2: Transmisja CanIf przebiega pomyślnie
   //Wyzerowanie licznika N_As_timer
   CanTp_TimerReset(&N_As_timer);
   //Wywołanie funkcji
   ret = CanTp_SendSingleFrame(PduId, payload, size);
   TEST_CHECK(ret == E_OK);
   //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_OK
-  TEST_CHECK(CanIf_Transmit_fake.call_count == 1);
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 2);
   //Sprawdzienie argumentów wywołania
   TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
   //Timer N_AS powinien zostać aktywowany:
@@ -994,7 +1025,7 @@ void Test_Of_CanTp_SendConsecutiveFrame(void){
   //CanTpTxConfirmation nie powinna być wywołana
   TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 0);
 
-  //TEST 2: Transmisja CanIf zwraca E_NOT_OK
+  //TEST 3: Transmisja CanIf zwraca E_NOT_OK
   //Zmiana ID
   PduId = 0x0101;
   //Wyzerowanie licznika N_As_timer
@@ -1002,9 +1033,8 @@ void Test_Of_CanTp_SendConsecutiveFrame(void){
   //Wywołanie funkcji, powinna zwrócić E_NOT_OK
   ret = CanTp_SendSingleFrame(PduId, payload, size);
   TEST_CHECK(ret == E_NOT_OK);
-
   //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_NOT_OK
-  TEST_CHECK(CanIf_Transmit_fake.call_count == 2);
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 3);
   //Sprawdzienie argumentów wywołania
   TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
   //Timer N_AS nie powinien zostać aktywowany:
@@ -1017,23 +1047,40 @@ void Test_Of_CanTp_SendConsecutiveFrame(void){
 
 void Test_Of_CanTp_SendFirstFrame(void){
   Std_ReturnType ret; 
-  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_NOT_OK, E_NOT_OK};
+  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_OK, E_NOT_OK};
   PduIdType PduId = 0xF1A7;
-  uint32 size = 8;
-
+  uint32 size = 10000;
+  uint8 payload[8]; 
+  //Create and Fill PduInfo with PrepareSegmentedFrame function
+  PduInfoType PduInfo;
+  uint8 SduDataPtr[8];
+  uint8 *MetaDataPtr;
+  PduInfo.MetaDataPtr = MetaDataPtr;
+  PduInfo.SduDataPtr = SduDataPtr;
+  CanPCI_Type CanPCI = {FF, size, 0, 0, 0, 0};
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
   //Ustawienie sekwencji wartości zwracanych przez CanIF_Transmitt
   SET_RETURN_SEQ(CanIf_Transmit, CanIf_Transmit_retv, 3);
   
-  //TEST 1: Transmisja CanIf przebiega pomyślnie
+  //TEST 1: Sprawdzenie czy CanIf jest wywoływany z odpowiednimi parametrami
+  ret = CanTp_SendFirstFrame(PduId, size);
+  // Sprawdzenie czy funcja została wywołana
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1);
+  TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
+  // Size > 5095 wiec nalezy porównać sześć pierwszych bajtów danych 
+  TEST_CHECK(memcmp(CanIf_Transmit_fake.arg1_val->SduDataPtr, PduInfo.SduDataPtr, 6) == 0);
+
+  //TEST 2: Transmisja CanIf przebiega pomyślnie
+  //Zmiana ID
+  PduId = 0x0101;
   //Wyzerowanie licznika N_As_timer oraz N_Bs_timer
   CanTp_TimerReset(&N_As_timer);
   CanTp_TimerReset(&N_Bs_timer);
-
   //Wywołanie funkcji
   ret = CanTp_SendFirstFrame(PduId, size);
   TEST_CHECK(ret == E_OK);
   //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_OK
-  TEST_CHECK(CanIf_Transmit_fake.call_count == 1);
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 2);
   //Sprawdzienie argumentów wywołania
   TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
   //Timer N_AS powinien zostać aktywowany:
@@ -1042,20 +1089,17 @@ void Test_Of_CanTp_SendFirstFrame(void){
   //CanTpTxConfirmation nie powinna być wywołana
   TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 0);
 
-
-  //TEST 2: Transmisja CanIf zwraca E_NOT_OK
+  //TEST 3: Transmisja CanIf zwraca E_NOT_OK
   //Zmiana ID
   PduId = 0x0101;
   //Wyzerowanie licznika N_As_timer i N_Bs
   CanTp_TimerReset(&N_As_timer);
   CanTp_TimerReset(&N_Bs_timer);
-
   //Wywołanie funkcji, powinna zwrócić E_NOT_OK
   ret = CanTp_SendFirstFrame(PduId, size);
   TEST_CHECK(ret == E_NOT_OK);
-
   //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_NOT_OK
-  TEST_CHECK(CanIf_Transmit_fake.call_count == 2);
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 3);
   //Sprawdzienie argumentów wywołania
   TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
   //Timer N_AS, NBSnie powinien zostać aktywowany:
@@ -1065,7 +1109,6 @@ void Test_Of_CanTp_SendFirstFrame(void){
   TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 1);
   TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg0_val == PduId);
   TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg1_val == E_NOT_OK);
-  printf("kaczka\r\n");
 }
 
 /*

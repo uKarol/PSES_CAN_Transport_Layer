@@ -927,6 +927,7 @@ static Std_ReturnType  CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint3
     ret = E_OK;
     //Przygotowanie PDU
     CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
+    
     //Sprawdzamy czy transmisja odbyła się poprawnie
     if(CanIf_Transmit(id , &PduInfo) == E_OK ){
         //Startowanie timera N_As
@@ -937,14 +938,11 @@ static Std_ReturnType  CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint3
             [SWS_CanTp_00343]  CanTp shall terminate the current  transmission connection 
              when CanIf_Transmit() returns E_NOT_OK when transmitting an SF, FF, of CF ()
         */
-
         //Wywołanie z argumentem E_NOT_OK
         PduR_CanTpTxConfirmation(id, E_NOT_OK);
-        
         //Ustawnienie E_NOT_OK jako wartość zwrotną
         ret = E_NOT_OK;
     }
-
     return ret;
 }
 
@@ -961,7 +959,6 @@ static Std_ReturnType CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* 
     Std_ReturnType ret = E_OK;
     //Przygotowanie PDU
     CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
-    
     //Sprawdzamy czy transmisja odbyła się poprawnie
     if(CanIf_Transmit(id , &PduInfo) == E_OK ){
         //Startowanie timera N_As
