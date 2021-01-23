@@ -120,9 +120,9 @@ static uint16 CanTp_Calculate_Available_Blocks( uint16 buffer_size );
 
 static void CanTp_set_blocks_to_next_cts( uint8 blocks );
 
-static CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* payload, uint32 size);
-static CanTp_SendFirstFrame(PduIdType id, uint32 message_lenght);
-static CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint32 size);
+static Std_ReturnType CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* payload, uint32 size);
+static Std_ReturnType CanTp_SendFirstFrame(PduIdType id, uint32 message_lenght);
+static Std_ReturnType CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint32 size);
 
 
 //TODO
@@ -736,6 +736,7 @@ static Std_ReturnType CanTp_GetPCI( const PduInfoType* can_data, CanPCI_Type* Ca
 }
 
 
+
 static Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoType *CanPdu_Info, uint8_t *Can_payload){
 
     /* TODO
@@ -758,6 +759,7 @@ static Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoT
     Std_ReturnType ret = E_OK;
 
     if( NE_NULL_PTR(CanPCI) && NE_NULL_PTR(CanPdu_Info) && NE_NULL_PTR(Can_payload) ){  
+        
         switch(CanPCI->frame_type){
             case SF:
                 *(CanPdu_Info->SduDataPtr) = 0;
@@ -912,15 +914,19 @@ static void CanTp_set_blocks_to_next_cts( uint8 blocks ){
 }
 
 
-
-static CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint32 size){
+static Std_ReturnType  CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint32 size){
+    //Create and Init PduInfo 
     PduInfoType PduInfo;
+    uint8 SduDataPtr[8];
+    uint8 *MetaDataPtr;
+    PduInfo.MetaDataPtr = MetaDataPtr;
+    PduInfo.SduDataPtr = SduDataPtr;
+
     CanPCI_Type CanPCI = {SF, size, 0, 0, 0, 0};
     Std_ReturnType ret = E_OK;
-
+    ret = E_OK;
     //Przygotowanie PDU
     CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
-    
     //Sprawdzamy czy transmisja odbyła się poprawnie
     if(CanIf_Transmit(id , &PduInfo) == E_OK ){
         //Startowanie timera N_As
@@ -934,7 +940,7 @@ static CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint32 size){
 
         //Wywołanie z argumentem E_NOT_OK
         PduR_CanTpTxConfirmation(id, E_NOT_OK);
-
+        
         //Ustawnienie E_NOT_OK jako wartość zwrotną
         ret = E_NOT_OK;
     }
@@ -943,8 +949,14 @@ static CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint32 size){
 }
 
 
-static CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* payload, uint32 size){
+static Std_ReturnType CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* payload, uint32 size){
+    //Create and Init PduInfo 
     PduInfoType PduInfo;
+    uint8 SduDataPtr[8];
+    uint8 *MetaDataPtr;
+    PduInfo.MetaDataPtr = MetaDataPtr;
+    PduInfo.SduDataPtr = SduDataPtr;
+
     CanPCI_Type CanPCI = {CF, size, SN, 0, 0, 0};
     Std_ReturnType ret = E_OK;
     //Przygotowanie PDU
@@ -969,15 +981,23 @@ static CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* payload, uint32
     return ret;
 }
 
-static CanTp_SendFirstFrame(PduIdType id, uint32 message_lenght){
+
+
+static Std_ReturnType CanTp_SendFirstFrame(PduIdType id, uint32 message_lenght){
+    //Create and Init PduInfo 
     PduInfoType PduInfo;
-    CanPCI_Type CanPCI = {FF, message_lenght, 0, 0, 0, 0};
+    uint8 SduDataPtr[8];
+    uint8 *MetaDataPtr;
+    PduInfo.MetaDataPtr = MetaDataPtr;
+    PduInfo.SduDataPtr = SduDataPtr;
+
+    CanPCI_Type CanPCI = {FF, message_lenght, 0, 0, 0, 0}; 
     uint8 payload[8] = {0,0,0,0,0,0,0,0};
     Std_ReturnType ret = E_OK;
 
     //Przygotowanie PDU
     CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
-    
+
     //Sprawdzamy czy transmisja odbyła się poprawnie
     if(CanIf_Transmit(id, &PduInfo) == E_OK ){
         //Startowanie timera N_As i N_Bs

@@ -23,6 +23,9 @@
 #define N_BR_TIMEOUT_VAL 100
 #define N_CR_TIMEOUT_VAL 100
 
+#define N_AS_TIMEOUT_VAL 100
+#define N_BS_TIMEOUT_VAL 100
+
 
 /*====================================================================================================================*\
     Typy globalne

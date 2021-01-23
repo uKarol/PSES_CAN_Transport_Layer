@@ -919,6 +919,155 @@ void Test_Of_CanTp_RxIndication_FF(void){
   TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
 }
 
+
+
+
+void Test_Of_CanTp_SendSingleFrame(void){
+  Std_ReturnType ret; 
+  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_NOT_OK, E_NOT_OK};
+  PduIdType PduId = 0xF1A7;
+  uint8 payload[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+  uint32 size = 8;
+  uint8 SN = 0x1;
+
+  //Ustawienie sekwencji wartości zwracanych przez CanIF_Transmitt
+  SET_RETURN_SEQ(CanIf_Transmit, CanIf_Transmit_retv, 3);
+  
+  //TEST 1: Transmisja CanIf przebiega pomyślnie
+  //Wyzerowanie licznika N_As_timer
+  CanTp_TimerReset(&N_As_timer);
+  //Wywołanie funkcji
+  ret = CanTp_SendConsecutiveFrame(PduId, SN,  payload, size);
+  TEST_CHECK(ret == E_OK);
+  //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_OK
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1);
+  //Sprawdzienie argumentów wywołania
+  TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
+  //Timer N_AS powinien zostać aktywowany:
+  TEST_CHECK(N_As_timer.state == TIMER_ACTIVE);
+  //CanTpTxConfirmation nie powinna być wywołana
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 0);
+
+  //TEST 2: Transmisja CanIf zwraca E_NOT_OK
+  //Zmiana ID
+  PduId = 0x0101;
+  //Wyzerowanie licznika N_As_timer
+  CanTp_TimerReset(&N_As_timer);
+  //Wywołanie funkcji, powinna zwrócić E_NOT_OK
+  ret = CanTp_SendConsecutiveFrame(PduId, SN, payload, size);
+  TEST_CHECK(ret == E_NOT_OK);
+
+  //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_NOT_OK
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 2);
+  //Sprawdzienie argumentów wywołania
+  TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
+  //Timer N_AS nie powinien zostać aktywowany:
+  TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE);
+  //CanTpTxConfirmation powinna być wywołana z aktualny id oraz E_NOT_OK
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 1);
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg0_val == PduId);
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg1_val == E_NOT_OK);
+}
+
+void Test_Of_CanTp_SendConsecutiveFrame(void){
+  Std_ReturnType ret; 
+  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_NOT_OK, E_NOT_OK};
+  PduIdType PduId = 0xF1A7;
+  uint8 payload[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+  uint32 size = 8;
+
+  //Ustawienie sekwencji wartości zwracanych przez CanIF_Transmitt
+  SET_RETURN_SEQ(CanIf_Transmit, CanIf_Transmit_retv, 3);
+  
+  //TEST 1: Transmisja CanIf przebiega pomyślnie
+  //Wyzerowanie licznika N_As_timer
+  CanTp_TimerReset(&N_As_timer);
+  //Wywołanie funkcji
+  ret = CanTp_SendSingleFrame(PduId, payload, size);
+  TEST_CHECK(ret == E_OK);
+  //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_OK
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1);
+  //Sprawdzienie argumentów wywołania
+  TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
+  //Timer N_AS powinien zostać aktywowany:
+  TEST_CHECK(N_As_timer.state == TIMER_ACTIVE);
+  //CanTpTxConfirmation nie powinna być wywołana
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 0);
+
+  //TEST 2: Transmisja CanIf zwraca E_NOT_OK
+  //Zmiana ID
+  PduId = 0x0101;
+  //Wyzerowanie licznika N_As_timer
+  CanTp_TimerReset(&N_As_timer);
+  //Wywołanie funkcji, powinna zwrócić E_NOT_OK
+  ret = CanTp_SendSingleFrame(PduId, payload, size);
+  TEST_CHECK(ret == E_NOT_OK);
+
+  //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_NOT_OK
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 2);
+  //Sprawdzienie argumentów wywołania
+  TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
+  //Timer N_AS nie powinien zostać aktywowany:
+  TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE);
+  //CanTpTxConfirmation powinna być wywołana z aktualny id oraz E_NOT_OK
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 1);
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg0_val == PduId);
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg1_val == E_NOT_OK);
+}
+
+void Test_Of_CanTp_SendFirstFrame(void){
+  Std_ReturnType ret; 
+  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_NOT_OK, E_NOT_OK};
+  PduIdType PduId = 0xF1A7;
+  uint32 size = 8;
+
+  //Ustawienie sekwencji wartości zwracanych przez CanIF_Transmitt
+  SET_RETURN_SEQ(CanIf_Transmit, CanIf_Transmit_retv, 3);
+  
+  //TEST 1: Transmisja CanIf przebiega pomyślnie
+  //Wyzerowanie licznika N_As_timer oraz N_Bs_timer
+  CanTp_TimerReset(&N_As_timer);
+  CanTp_TimerReset(&N_Bs_timer);
+
+  //Wywołanie funkcji
+  ret = CanTp_SendFirstFrame(PduId, size);
+  TEST_CHECK(ret == E_OK);
+  //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_OK
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1);
+  //Sprawdzienie argumentów wywołania
+  TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
+  //Timer N_AS powinien zostać aktywowany:
+  TEST_CHECK(N_As_timer.state == TIMER_ACTIVE);
+  TEST_CHECK(N_Bs_timer.state == TIMER_ACTIVE);
+  //CanTpTxConfirmation nie powinna być wywołana
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 0);
+
+
+  //TEST 2: Transmisja CanIf zwraca E_NOT_OK
+  //Zmiana ID
+  PduId = 0x0101;
+  //Wyzerowanie licznika N_As_timer i N_Bs
+  CanTp_TimerReset(&N_As_timer);
+  CanTp_TimerReset(&N_Bs_timer);
+
+  //Wywołanie funkcji, powinna zwrócić E_NOT_OK
+  ret = CanTp_SendFirstFrame(PduId, size);
+  TEST_CHECK(ret == E_NOT_OK);
+
+  //Funkcja CanIf_Transmit powinna zostać wywołana i powinna zwrócić E_NOT_OK
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 2);
+  //Sprawdzienie argumentów wywołania
+  TEST_CHECK(CanIf_Transmit_fake.arg0_val == PduId);
+  //Timer N_AS, NBSnie powinien zostać aktywowany:
+  TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE);
+  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE);
+  //CanTpTxConfirmation powinna być wywołana z aktualny id oraz E_NOT_OK
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 1);
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg0_val == PduId);
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg1_val == E_NOT_OK);
+  printf("kaczka\r\n");
+}
+
 /*
   Lista testów - wpisz tutaj wszystkie funkcje które mają być wykonane jako testy.
 */
@@ -933,6 +1082,10 @@ TEST_LIST = {
     { "Test_Of_CanTp_Resume", Test_Of_CanTp_Resume},
     { "Test_Of_CanTp_Reset_Rx_State_Variables", Test_Of_CanTp_Reset_Rx_State_Variables},
     { "Test_Of_CanTp_RxIndication_FF", Test_Of_CanTp_RxIndication_FF},
+    { "Test_Of_CanTp_SendSingleFrame", Test_Of_CanTp_SendSingleFrame},
+    { "Test_Of_CanTp_ConsecutiveFrame", Test_Of_CanTp_SendConsecutiveFrame},
+    { "Test_Of_CanTp_FirstFrame", Test_Of_CanTp_SendFirstFrame},
+    
     //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
     { NULL, NULL }                                      /* To musi być na końcu */
 };
