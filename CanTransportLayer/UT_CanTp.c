@@ -729,7 +729,7 @@ void Test_Of_Main(){
 
 ///< ONLY SF>
 
-void Test_Of_CanTp_RxIndication(void){
+void Test_Of_CanTp_RxIndication_SF(void){
 
 // declare test variables
   int i;
@@ -742,24 +742,34 @@ void Test_Of_CanTp_RxIndication(void){
 
   RESET_FAKE(PduR_CanTpStartOfReception);
   RESET_FAKE(PduR_CanTpCopyRxData); 
+  RESET_FAKE(PduR_CanTpRxIndication);
 // PDU Router FF
-  PduLengthType buffSize_array_local[10] = {7,1,7,7,7,6,7,8,9,0};
+  PduLengthType buffSize_array_local[10] = {7,1,7,7,7,7,7,7,9,0};
   PduR_CanTpStartOfReception_buffSize_array = buffSize_array_local;
   PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
 
     
-  BufReq_ReturnType PduR_CanTpStartOfReception_ReturnVals[10] = { BUFREQ_OK, BUFREQ_OK, BUFREQ_OVFL, BUFREQ_OK}; 
-  BufReq_ReturnType PduR_CanTpCopyRxData_ReturnVals[10] =       { BUFREQ_OK, BUFREQ_E_NOT_OK}; 
-  SET_RETURN_SEQ(PduR_CanTpStartOfReception, PduR_CanTpStartOfReception_ReturnVals, 4);
+  BufReq_ReturnType PduR_CanTpStartOfReception_ReturnVals[10] = { BUFREQ_OK, BUFREQ_OK, BUFREQ_OVFL, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK}; 
+  BufReq_ReturnType PduR_CanTpCopyRxData_ReturnVals[10] =       { BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_OK, BUFREQ_OK}; 
+  SET_RETURN_SEQ(PduR_CanTpStartOfReception, PduR_CanTpStartOfReception_ReturnVals, 6);
   PduR_CanTpStartOfReception_fake.custom_fake =  PduR_CanTpStartOfReception_FF;
 
-  SET_RETURN_SEQ(PduR_CanTpCopyRxData, PduR_CanTpCopyRxData_ReturnVals, 2);
+  SET_RETURN_SEQ(PduR_CanTpCopyRxData, PduR_CanTpCopyRxData_ReturnVals, 4);
   PduR_CanTpCopyRxData_fake.custom_fake = PduR_CanTpCopyRxData_FF;
 
 // set CanTp internal variables
 
 // testujemy scenariusz ze strony 62
-// 9.2 Successful SF N-PDU reception
+/*
+
+  TEST CASE 1
+
+  testujemy sytuacje w której odbieramy ramkę typu SINGLE FRAME
+  zakładamy że rozmiar bufora jest wystarczający na odebranie ramki 
+  wszystko pozimmo pójść zgodnie z planem
+
+*/
+
   CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
 
   CanPCI.frame_lenght = 7;
@@ -789,7 +799,17 @@ void Test_Of_CanTp_RxIndication(void){
   TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 1);
   TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_OK);
 
- // te same dane, ale teraz bufor za mały
+/*
+
+  TEST CASE 2
+
+  testujemy sytuacje w której odbieramy ramkę typu SINGLE FRAME dokładnie 
+  taka samą jak w poprzedim tescie
+  zakładamy że rozmiar bufora jest za mały na odebranie ramki 
+  odbieranie powinno zakońćzyć się błędem 
+  w efekcie powinna zostać wysłana wartośc E_NOT_OK do PDU Routera
+
+*/
 
   CanTp_RxIndication (RxPduId, &PduInfoPtr );
 
@@ -797,18 +817,36 @@ void Test_Of_CanTp_RxIndication(void){
   TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
   TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 2); // this funtions shulod be called
   TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1); // this functio shlud not be called
-  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); // this functio shlud not be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); // 
   TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
-  // te same dane, ale teraz bufor sie wysypal
-   
+  
+  
+  /*
+  TEST CASE 3
+
+  testujemy sytuacje w której odbieramy ramkę typu SINGLE FRAME dokładnie 
+  taka samą jak w poprzedim tescie
+  zakłądamy że PduR_CanTpStartOfReception nie zwróciła wartości BUFFER_OK 
+  odbieranie powinno zakońćzyć się błędem, ale nie należy wołać funkcji PDUR_CanTpRxIndication
+*/
+  
   CanTp_RxIndication (RxPduId, &PduInfoPtr );
 
   TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
   TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
   TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 3); // this funtions shulod be called
   TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1); // this functio shlud not be called
-  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); // this functio shlud not be called
-  
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2); 
+ 
+  /*
+  TEST CASE 4
+
+  testujemy sytuacje w której odbieramy ramkę typu SINGLE FRAME dokładnie 
+  taka samą jak w poprzedim tescie
+  zakłądamy że PduR_CanTpStartOfReception zwróciła wartości BUFFER_OK
+  natomiast funkcja kopiująca dane zwróciłą bląd 
+  odbieranie powinno zakońćzyć się błędem, należy wywołać funkcję PDUR_CanTpRxIndication
+  */
   // PduR_CopyData returns error
   CanTp_RxIndication (RxPduId, &PduInfoPtr );
   TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
@@ -830,6 +868,82 @@ void Test_Of_CanTp_RxIndication(void){
   TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 3);       //
   TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
 
+  /*
+    TEST CASE 5
+
+    testujaemy poprawną ramkę w momencie kiedy jest nieoczekiwana 
+    receiver jest w stanie PROCESSING 
+    trawjąca transmisja powinna zostać przerwana 
+    ramka SF powinna zostać wysłana poprawnie
+
+  */
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
+
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduLength == 7);
+
+  //TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[i] == payload[i]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
+  
+
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 5); // this funtions shulod be called
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 3); // this functio shlud be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 5);
+
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_history[3] == E_NOT_OK);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_OK);
+
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0); // to powinno zostać wyzerowane 
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0); // to też
+
+  /*
+    TEST CASE 6
+
+    testujaemy poprawną ramkę w momencie kiedy jest nieoczekiwana 
+    receiver jest w stanie PROCESSING_SUSPENDED 9oczekiwanie na bufor)
+    trawjąca transmisja powinna zostać przerwana 
+    ramka SF powinna zostać wysłana poprawnie
+
+  */
+  CanTp_Reset_Rx_State_Variables();
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED;
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
+
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduLength == 7);
+
+  //TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[i] == payload[i]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
+  
+
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 6); // this funtions shulod be called
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 4); // this functio shlud be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 7);
+
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_history[5] == E_NOT_OK);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_OK);
+
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0); // to powinno zostać wyzerowane 
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0); // to też
+       
+
 }
 
 void Test_Of_CanTp_RxIndication_FF(void){
@@ -842,28 +956,40 @@ void Test_Of_CanTp_RxIndication_FF(void){
   CanPCI_Type CanPCI;
 
 // configure FF
-
+  RESET_FAKE(PduR_CanTpRxIndication);
   RESET_FAKE(PduR_CanTpStartOfReception);
   RESET_FAKE(PduR_CanTpCopyRxData); 
 // PDU Router FF
-  PduLengthType buffSize_array_local[10] = {7,1,7,7,7,6,7,8,9,0};
+  PduLengthType buffSize_array_local[10] = {7,1,7,7,7,7,7,8,9,0};
   PduR_CanTpStartOfReception_buffSize_array = buffSize_array_local;
   PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
 
     
-  BufReq_ReturnType PduR_CanTpStartOfReception_ReturnVals[10] = { BUFREQ_OK, BUFREQ_OK, BUFREQ_OVFL, BUFREQ_E_NOT_OK}; 
-  BufReq_ReturnType PduR_CanTpCopyRxData_ReturnVals[10] =       { BUFREQ_OK, BUFREQ_E_NOT_OK}; 
-  SET_RETURN_SEQ(PduR_CanTpStartOfReception, PduR_CanTpStartOfReception_ReturnVals, 4);
+  BufReq_ReturnType PduR_CanTpStartOfReception_ReturnVals[10] = { BUFREQ_OK, BUFREQ_OK, BUFREQ_OVFL, BUFREQ_E_NOT_OK, BUFREQ_OK, BUFREQ_OK,}; 
+  BufReq_ReturnType PduR_CanTpCopyRxData_ReturnVals[10] =       { BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_OK, BUFREQ_OK,}; 
+  SET_RETURN_SEQ(PduR_CanTpStartOfReception, PduR_CanTpStartOfReception_ReturnVals, 6);
   PduR_CanTpStartOfReception_fake.custom_fake =  PduR_CanTpStartOfReception_FF;
 
-  SET_RETURN_SEQ(PduR_CanTpCopyRxData, PduR_CanTpCopyRxData_ReturnVals, 2);
+  SET_RETURN_SEQ(PduR_CanTpCopyRxData, PduR_CanTpCopyRxData_ReturnVals, 4);
   PduR_CanTpCopyRxData_fake.custom_fake = PduR_CanTpCopyRxData_FF;
 
 // wszystk idzie ok
 
+/*
+  TEST CASE 1
+  
+  odbieramy ramkę typu FF i zakładamy, że wszystko idzie zgodnie z planem
+  zakłądamy że funkcja PduR_CanTpStartOfReception zwróciła BUFREQ_OK
+  zakłądamy że bufor jest w stanie pomiescić co najmniej jedną ramkę CF (co najmniej 7B)
+  funkcja powinna wysłać ramkę FlowControl typu CTS 
+  uzupełnić zmienne stanu
+  przejść do stanu RX_PROCESSINS 
+
+*/
+
   CanTp_Reset_Rx_State_Variables();
 
-  CanPCI.frame_lenght = 100;
+  CanPCI.frame_lenght = 100;  // długość odbieranych danych
   CanPCI.frame_type = FF;
   uint8 payload[8] = "xxx"; // w wypadku FF payload nie ma znaczenia
 
@@ -872,27 +998,67 @@ void Test_Of_CanTp_RxIndication_FF(void){
 
   TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 100); // sprawdz argumenty
   TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 1);
-  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING);
-  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 1);
-  TEST_CHECK(CanTp_StateVariables.message_length == 100);
-  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1);
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING); // funkcja powinna przejsc do stanu proceeing
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 1);  // bufor zostal tak dobrany aby ilosc blokow byla rowna 1 
+  TEST_CHECK(CanTp_StateVariables.message_length == 100);   // do zmiennych stanu powinna dolaczyc dlugosc wiadomosci
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1); // do zmiennych stanu powinno dalczyc ID
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 0);       //PduR_CanTpRxIndication nie powinna zostac wywalona bo nie ma bledu
+ // TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
 
 // za maly bufor
 
-  CanTp_Reset_Rx_State_Variables();
 /*
-  CanPCI.frame_lenght = 100;
-  CanPCI.frame_type = FF;
-  uint8 payload[8] = "xxx"; // w wypadku FF payload nie ma znaczenia
+  TEST CASE 2
+  
+  odbieramy ramkę typu FF 
+  zakłądamy że funkcja PduR_CanTpStartOfReception zwróciła BUFREQ_OK
+  bufor jest jednak za mały na pomieszczenie CF
+  funkcja powinna wysłać ramkę FlowControl typu WAIT 
+  uzupełnić zmienne stanu
+  przejść do stanu RX_PROCESSING_SUSPENDED 
 
-  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
-  CanTp_RxIndication (RxPduId, &PduInfoPtr );*/
+*/
+
+  CanTp_Reset_Rx_State_Variables();
+
   CanTp_RxIndication (RxPduId, &PduInfoPtr );
   TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 100); // sprawdz argumenty
   TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 1);
   TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED);
   TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
   TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 0);       //PduR_CanTpRxIndication nie powinna zostac wywalona bo nie ma bledu
+ // TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
+
+
+/*
+  TEST CASE 3
+  
+  odbieramy ramkę typu FF i zakładamy
+  zakłądamy że funkcja PduR_CanTpStartOfReception zwróciła BUFREQ_OVFL
+  funkcja powinna wysłać ramkę FlowControl typu OVLF
+  funkcja powinna zresetować zmienne stanu 
+  funkcja powinna przejsc do stanu WAIT
+
+*/
+
+  CanTp_Reset_Rx_State_Variables();
+
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 100); // sprawdz argumenty
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0); // ta funkcja nie powinna zostac wywolana 
+
+  /*
+  TEST CASE 4
+  
+  odbieramy ramkę typu FF i zakładamy
+  zakłądamy że funkcja PduR_CanTpStartOfReception zwróciła BUFREQ_NOT_OK
+  funkcja powinna zresetować zmienne stanu 
+  funkcja powinna przejsc do stanu WAIT
+
+*/
 
   CanTp_Reset_Rx_State_Variables();
 
@@ -901,22 +1067,373 @@ void Test_Of_CanTp_RxIndication_FF(void){
   TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
   TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
   TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 0); // ta funkcja nie powinna zostac wywolana 
+  /*
+  TEST CASE 5
+  
+  UNEXPECTED FRAME DETECTION 
 
-  CanTp_Reset_Rx_State_Variables();
+  wysyłamy ramkę FF, kuedy receiver oczekuje CF
 
-  CanTp_RxIndication (RxPduId, &PduInfoPtr );
-  TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 100); // sprawdz argumenty
-  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
-  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
-  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+  poprzednia transmisja powinna zostać przerwana ze 
+  statusem NOT_OK i rozpoaczęta powinna zostac nowa
+
+*/
 
   // send FF when is unexpected
   CanTp_Reset_Rx_State_Variables();
   CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
   CanTp_RxIndication (RxPduId, &PduInfoPtr );
-  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+  
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 1);
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 1);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 1);       
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
+
+/*
+  TEST CASE 6
+  
+  UNEXPECTED FRAME DETECTION 
+
+  wysyłamy ramkę FF, kuedy receiver oczekuje CF
+
+  poprzednia transmisja powinna zostać przerwana ze 
+  statusem NOT_OK i rozpoaczęta powinna zostac nowa
+
+*/
+
+  // send FF when is unexpected
+  CanTp_Reset_Rx_State_Variables();
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED;
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 1);
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 1);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2);       
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
+}
+
+void Test_Of_CanTp_RxIndication_CF(void){
+
+// declare test variables
+  int i;
+  PduIdType  RxPduId = 1;
+
+  PduInfoType PduInfoPtr;
+  CanPCI_Type CanPCI;
+
+// configure FF
+  RESET_FAKE(PduR_CanTpRxIndication);
+  RESET_FAKE(PduR_CanTpCopyRxData); 
+// PDU Router FF
+  PduLengthType buffSize_array_local[10] = {7,7,1,7,7,7,7,8,9,0};
+  PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
+
+  BufReq_ReturnType PduR_CanTpCopyRxData_ReturnVals[10] =       { BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_OK}; 
+
+  SET_RETURN_SEQ(PduR_CanTpCopyRxData, PduR_CanTpCopyRxData_ReturnVals, 5);
+  PduR_CanTpCopyRxData_fake.custom_fake = PduR_CanTpCopyRxData_FF;
+
+  CanTp_Reset_Rx_State_Variables();
+
+  // to jest do przygotowanie ramki
+  CanPCI.SN = 4;  // długość odbieranych danych
+  CanPCI.frame_type = CF;
+  uint8 payload[8] = "Marshal"; // w wypadku FF payload nie ma znaczenia
+
+  /*
+    TEST CASE 1 
+    Frame should be recieved without any problem
+    No Flow Control
+*/
+  
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+  CanTp_StateVariables.blocks_to_next_cts = 2; 
+  CanTp_StateVariables.message_length = 20;
+  CanTp_StateVariables.expected_CF_SN = 4;
+  CanTp_StateVariables.sended_bytes = 0;
+  CanTp_StateVariables.CanTp_Current_RxId = 1;
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  PduInfoPtr.SduLength = 7;
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  
+  // function calls
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
+
+  // check state variables
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 1); 
+  TEST_CHECK(CanTp_StateVariables.message_length == 20);
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 5);
+  TEST_CHECK(CanTp_StateVariables.sended_bytes == 7);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1);
+
+  // check timer state - todo
+  /*
+    TEST CASE 2 
+    Frame should be recieved, but buffer it is time to send CTS 
+    Flow Control with CTS shuld be send
+*/
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+  CanTp_StateVariables.blocks_to_next_cts = 1; 
+  CanTp_StateVariables.message_length = 20;
+  CanTp_StateVariables.expected_CF_SN = 4;
+  CanTp_StateVariables.sended_bytes = 0;
+  CanTp_StateVariables.CanTp_Current_RxId = 1;
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  
+  // function calls
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 2);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
+
+  // check state variables
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 1); 
+  TEST_CHECK(CanTp_StateVariables.message_length == 20);
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 5);
+  TEST_CHECK(CanTp_StateVariables.sended_bytes == 7);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1);
+
+
+  /*
+    TEST CASE 3 
+    Frame should be recieved, but buffer is too small for further frames
+    Flow Control with WAIT shuld be send
+
+  */
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+  CanTp_StateVariables.blocks_to_next_cts = 1; 
+  CanTp_StateVariables.message_length = 20;
+  CanTp_StateVariables.expected_CF_SN = 4;
+  CanTp_StateVariables.sended_bytes = 0;
+  CanTp_StateVariables.CanTp_Current_RxId = 1;
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  
+  // function calls
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 3);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
+
+  // check state variables
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0); 
+  TEST_CHECK(CanTp_StateVariables.message_length == 20);
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 5);
+  TEST_CHECK(CanTp_StateVariables.sended_bytes == 7);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1);
+
+    /*
+    TEST CASE 4 
+    buffer failure - reception abort
+
+  */
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+  CanTp_StateVariables.blocks_to_next_cts = 1; 
+  CanTp_StateVariables.message_length = 20;
+  CanTp_StateVariables.expected_CF_SN = 4;
+  CanTp_StateVariables.sended_bytes = 0;
+  CanTp_StateVariables.CanTp_Current_RxId = 1;
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  
+  // function calls
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 4);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 1);       
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
+
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
+
+  // check state variables
   TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
-  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0); 
+  TEST_CHECK(CanTp_StateVariables.message_length == 0);
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+  TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 0);
+
+  /*
+    TEST CASE 5 
+    error - unexpected SN
+
+  */
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+  CanTp_StateVariables.blocks_to_next_cts = 1; 
+  CanTp_StateVariables.message_length = 20;
+  CanTp_StateVariables.expected_CF_SN = 5; // here
+  CanTp_StateVariables.sended_bytes = 0;
+  CanTp_StateVariables.CanTp_Current_RxId = 1;
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  
+  // function calls
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 4);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 2);       
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
+
+  // check state variables
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0); 
+  TEST_CHECK(CanTp_StateVariables.message_length == 0);
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+  TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 0);
+
+
+  /*
+    TEST CASE 6 
+    error - unexpected ID
+
+  */
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+  CanTp_StateVariables.blocks_to_next_cts = 1; 
+  CanTp_StateVariables.message_length = 20;
+  CanTp_StateVariables.expected_CF_SN = 5; // here
+  CanTp_StateVariables.sended_bytes = 0;
+  CanTp_StateVariables.CanTp_Current_RxId = 2; //here
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  
+  // function calls
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 4);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 3);       
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
+
+  // check state variables
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0); 
+  TEST_CHECK(CanTp_StateVariables.message_length == 0);
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+  TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 0);
+
+  /*
+    TEST CASE 7 
+    FINISH SENDING MESSAGE
+  */
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+  CanTp_StateVariables.blocks_to_next_cts = 1; 
+  CanTp_StateVariables.message_length = 20;
+  CanTp_StateVariables.expected_CF_SN = 4; 
+  CanTp_StateVariables.sended_bytes = 13;
+  CanTp_StateVariables.CanTp_Current_RxId = 1; 
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  
+  // function calls
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 5);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 4);       
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_OK);
+
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
+
+  // check state variables
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0); 
+  TEST_CHECK(CanTp_StateVariables.message_length == 0);
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+  TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 0);
+
+  /*
+    TEST CASE 8
+    CALLING SEND CONSECUTIVE FRAME WHEN IT IS UNEXPECTED
+    FRAME SHOULD BE IGNORED
+
+  */
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
+  CanTp_StateVariables.blocks_to_next_cts = 2; 
+  CanTp_StateVariables.message_length = 20;
+  CanTp_StateVariables.expected_CF_SN = 4;
+  CanTp_StateVariables.sended_bytes = 0;
+  CanTp_StateVariables.CanTp_Current_RxId = 1;
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  PduInfoPtr.SduLength = 7;
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  
+  // function calls
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 5);   // should not be changed, function shouldnt be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 4); // should not be changed,
+
+  // check state variables - should not be changed
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 2); 
+  TEST_CHECK(CanTp_StateVariables.message_length == 20);
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 4);
+  TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1);
+
+  /*
+    TEST CASE 9
+    CALLING SEND CONSECUTIVE FRAME WHEN IT IS WAITING FOR BUFFER 
+    ERROR SHOULD OCCURE
+    COMMUNICATION SHOULD BE RESET
+  */
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED;
+  CanTp_StateVariables.blocks_to_next_cts = 2; 
+  CanTp_StateVariables.message_length = 20;
+  CanTp_StateVariables.expected_CF_SN = 4;
+  CanTp_StateVariables.sended_bytes = 0;
+  CanTp_StateVariables.CanTp_Current_RxId = 1;
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  PduInfoPtr.SduLength = 7;
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  
+  // function calls
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 5);   // should not be changed, function shouldnt be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 5); // should not be changed,
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
+  // check state variables - should not be changed
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+  TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0); 
+  TEST_CHECK(CanTp_StateVariables.message_length == 0);
+  TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+  TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 0);
+
+
 }
 
 
@@ -1118,17 +1635,17 @@ TEST_LIST = {
     { "Test_Of_CanTp_FrameCheckType", Test_Of_CanTp_FrameCheckType },   /* Format to { "nazwa testu", nazwa_funkcji } */
     { "Test_Of_CanTp_PrepareSegmenetedFrame", Test_Of_CanTp_PrepareSegmenetedFrame },
     { "Test_Of_Custom_FFs", Test_Of_Custom_FFs},
-    { "Test_Of_CanTp_RxIndication", Test_Of_CanTp_RxIndication},
     { "Test_Of_CanTp_Calculate_Available_Blocks", Test_Of_CanTp_Calculate_Available_Blocks},
     { "Test_Of_Main", Test_Of_Main},
     { "Test_Of_CanTp_set_blocks_to_next_cts", Test_Of_CanTp_set_blocks_to_next_cts},
     { "Test_Of_CanTp_Resume", Test_Of_CanTp_Resume},
     { "Test_Of_CanTp_Reset_Rx_State_Variables", Test_Of_CanTp_Reset_Rx_State_Variables},
+    { "Test_Of_CanTp_RxIndication_SF", Test_Of_CanTp_RxIndication_SF},
     { "Test_Of_CanTp_RxIndication_FF", Test_Of_CanTp_RxIndication_FF},
     { "Test_Of_CanTp_SendSingleFrame", Test_Of_CanTp_SendSingleFrame},
     { "Test_Of_CanTp_ConsecutiveFrame", Test_Of_CanTp_SendConsecutiveFrame},
     { "Test_Of_CanTp_FirstFrame", Test_Of_CanTp_SendFirstFrame},
-    
+    { "Test_Of_CanTp_RxIndication_CF", Test_Of_CanTp_RxIndication_CF},
     //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
     { NULL, NULL }                                      /* To musi być na końcu */
 };
