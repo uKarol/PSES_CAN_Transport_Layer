@@ -147,6 +147,114 @@ void Test_Of_CanTp_Reset_Rx_State_Variables(){
 
 }
 
+void Test_Of_CanTp_SendFlowControl(){
+
+    PduIdType ID = 1;
+    uint8 BS = 1;
+    Std_ReturnType ret;
+
+    RESET_FAKE(CanIf_Transmit);
+    RESET_FAKE(PduR_CanTpRxIndication);
+    
+    Std_ReturnType RetVal[10] = {E_OK, E_OK, E_OK, E_NOT_OK, E_OK, E_OK};
+    SET_RETURN_SEQ( CanIf_Transmit, RetVal, 10);
+
+    // reset all timers
+    CanTp_TimerReset(&N_Cr_timer);
+    CanTp_TimerReset(&N_Ar_timer);
+    CanTp_TimerReset(&N_Br_timer);
+
+
+    /*
+      TEST CASE 1
+      WYSYLAMY CTS, ZAKLADAMY ZE WSZYSTKO JEST OK
+    */
+
+    ret = CanTp_SendFlowControl( ID, BS, FC_CTS, DEFAULT_ST );
+
+    TEST_CHECK(ret == E_OK);
+    TEST_CHECK(CanIf_Transmit_fake.call_count == 1);
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_ACTIVE);
+    TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE);
+    TEST_CHECK(N_Ar_timer.state == TIMER_ACTIVE);
+
+    /*
+      TEST CASE 2
+      WYSYLAMY WAIT, ZAKLADAMY ZE WSZYSTKO JEST OK
+    */
+        // reset all timers
+    CanTp_TimerReset(&N_Cr_timer);
+    CanTp_TimerReset(&N_Ar_timer);
+    CanTp_TimerReset(&N_Br_timer);
+
+    ret = CanTp_SendFlowControl( ID, BS, FC_WAIT, DEFAULT_ST );
+
+    TEST_CHECK(ret == E_OK);
+    TEST_CHECK(CanIf_Transmit_fake.call_count == 2);
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE);
+    TEST_CHECK(N_Br_timer.state == TIMER_ACTIVE);
+    TEST_CHECK(N_Ar_timer.state == TIMER_ACTIVE);
+
+    /*
+      TEST CASE 3
+      WYSYLAMY WAIT, ZAKLADAMY ZE WSZYSTKO JEST OK
+    */
+        // reset all timers
+    CanTp_TimerReset(&N_Cr_timer);
+    CanTp_TimerReset(&N_Ar_timer);
+    CanTp_TimerReset(&N_Br_timer);
+
+    ret = CanTp_SendFlowControl( ID, BS, FC_OVFLW, DEFAULT_ST );
+
+    TEST_CHECK(ret == E_OK);
+    TEST_CHECK(CanIf_Transmit_fake.call_count == 3);
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE);
+    TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE);
+    TEST_CHECK(N_Ar_timer.state == TIMER_ACTIVE);
+
+    /*
+      TEST CASE 4
+      WYSYLAMY NIEISTNIEJACE FS
+    */
+        // reset all timers
+    CanTp_TimerReset(&N_Cr_timer);
+    CanTp_TimerReset(&N_Ar_timer);
+    CanTp_TimerReset(&N_Br_timer);
+
+    ret = CanTp_SendFlowControl( ID, BS, 6, DEFAULT_ST );
+
+    TEST_CHECK(ret == E_NOT_OK);
+    TEST_CHECK(CanIf_Transmit_fake.call_count == 3);
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE);
+    TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE);
+    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE);
+
+    /*
+      TEST CASE 5
+      CanIf zwrocil NOT_OK
+    */
+        // reset all timers
+    CanTp_TimerReset(&N_Cr_timer);
+    CanTp_TimerReset(&N_Ar_timer);
+    CanTp_TimerReset(&N_Br_timer);
+
+    ret = CanTp_SendFlowControl( ID, BS, FC_WAIT, DEFAULT_ST );
+
+    TEST_CHECK(ret == E_NOT_OK);
+    TEST_CHECK(CanIf_Transmit_fake.call_count == 4);
+    TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 1);
+    TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_NOT_OK);
+    TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE);
+    TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE);
+    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE);
+
+
+}
+
 #include "stdio.h"
 /**
   @brief Test dodawania
@@ -411,6 +519,11 @@ void Test_Of_Main(){
    // przypominam że funcja main używa funkcji z pdu routera, dla których musimy zrobić FF
    // zasadniczo interesuje nas funkcja PduR_CanTpCopyRxData
    // przygotujmey tablice z wartosciami zwracanymi przez wskaznik
+    RESET_FAKE(PduR_CanTpRxIndication);
+     RESET_FAKE(CanIf_Transmit);
+      
+    Std_ReturnType RetVal[10] = {E_OK, E_OK, E_OK, E_OK, E_OK, E_OK};
+    SET_RETURN_SEQ( CanIf_Transmit, RetVal, 10);
     PduLengthType buffSize_array_local[10] = {0,0,0,0,10,0,0,0,9,0};
     PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
 
@@ -592,10 +705,12 @@ void Test_Of_Main(){
        // N_Br powinien byc zresetowany 
     TEST_CHECK(N_Br_timer.counter == 0);
     TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE );
-    // N_Ar powinien byc nieruszony, bo zostal wczesniej zresetowany 
+    // poszedł FLowControl, timery Ar i Cr powinny ruszyć 
     TEST_CHECK(N_Ar_timer.counter == 0);
-    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+    TEST_CHECK(N_Ar_timer.state == TIMER_ACTIVE );
 
+    TEST_CHECK(N_Cr_timer.counter == 0);
+    TEST_CHECK(N_Cr_timer.state == TIMER_ACTIVE );
 
     // //// N_Br powinien byc aktywowany, UPDATE:  Aktywowanie N_Cr zostało przeniesione w inne miejsce
     // TEST_CHECK(N_Cr_timer.counter == 0);
@@ -610,6 +725,7 @@ void Test_Of_Main(){
   */
    // uruchamiamy N_Br
   CanTp_TimerReset(&N_Cr_timer);
+  CanTp_TimerReset(&N_Ar_timer);
   CanTp_TimerStart(&N_Br_timer);
   // parametry zostaly tak ustawione abysmy otrzymali ilosc blokow rowna 0
     CanTp_StateVariables.message_length = 10;
@@ -625,9 +741,9 @@ void Test_Of_Main(){
        // N_Br powinien byc dalej aktywny, licznik powinien sie wyzerowac
     TEST_CHECK(N_Br_timer.counter == 0);
     TEST_CHECK(N_Br_timer.state == TIMER_ACTIVE );
-    // N_Ar powinien byc nieruszony, bo zostal wczesniej zresetowany 
+    // N_Ar powinien byc ruszony, bo wysyłamy flow controla
     TEST_CHECK(N_Ar_timer.counter == 0);
-    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+    TEST_CHECK(N_Ar_timer.state == TIMER_ACTIVE );
     //// N_Cr powinien byc nieaktywny
     TEST_CHECK(N_Cr_timer.counter == 0);
     TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
@@ -640,7 +756,7 @@ void Test_Of_Main(){
     jedynie wartosc licznika inna
     */
 
-
+    CanTp_TimerReset(&N_Ar_timer);
     CanTp_MainFunction ();
     // copy data powinna byc wykonana 
     TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 7); 
@@ -743,6 +859,13 @@ void Test_Of_CanTp_RxIndication_SF(void){
   RESET_FAKE(PduR_CanTpStartOfReception);
   RESET_FAKE(PduR_CanTpCopyRxData); 
   RESET_FAKE(PduR_CanTpRxIndication);
+
+
+  RESET_FAKE(CanIf_Transmit);
+      
+  Std_ReturnType RetVal[10] = {E_OK, E_OK, E_OK, E_OK, E_OK, E_OK};
+  SET_RETURN_SEQ( CanIf_Transmit, RetVal, 10);
+
 // PDU Router FF
   PduLengthType buffSize_array_local[10] = {7,1,7,7,7,7,7,7,9,0};
   PduR_CanTpStartOfReception_buffSize_array = buffSize_array_local;
@@ -959,6 +1082,10 @@ void Test_Of_CanTp_RxIndication_FF(void){
   RESET_FAKE(PduR_CanTpRxIndication);
   RESET_FAKE(PduR_CanTpStartOfReception);
   RESET_FAKE(PduR_CanTpCopyRxData); 
+    RESET_FAKE(CanIf_Transmit);
+      
+  Std_ReturnType RetVal[10] = {E_OK, E_OK, E_OK, E_OK, E_OK, E_OK};
+  SET_RETURN_SEQ( CanIf_Transmit, RetVal, 10);
 // PDU Router FF
   PduLengthType buffSize_array_local[10] = {7,1,7,7,7,7,7,8,9,0};
   PduR_CanTpStartOfReception_buffSize_array = buffSize_array_local;
@@ -1127,6 +1254,10 @@ void Test_Of_CanTp_RxIndication_CF(void){
 // configure FF
   RESET_FAKE(PduR_CanTpRxIndication);
   RESET_FAKE(PduR_CanTpCopyRxData); 
+  RESET_FAKE(CanIf_Transmit);
+      
+  Std_ReturnType RetVal[10] = {E_OK, E_OK, E_OK, E_OK, E_OK, E_OK};
+  SET_RETURN_SEQ( CanIf_Transmit, RetVal, 10);
 // PDU Router FF
   PduLengthType buffSize_array_local[10] = {7,7,1,7,7,7,7,8,9,0};
   PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
@@ -1636,6 +1767,7 @@ TEST_LIST = {
     { "Test_Of_CanTp_PrepareSegmenetedFrame", Test_Of_CanTp_PrepareSegmenetedFrame },
     { "Test_Of_Custom_FFs", Test_Of_Custom_FFs},
     { "Test_Of_CanTp_Calculate_Available_Blocks", Test_Of_CanTp_Calculate_Available_Blocks},
+    { "Test_Of_CanTp_SendFlowControl", Test_Of_CanTp_SendFlowControl},
     { "Test_Of_Main", Test_Of_Main},
     { "Test_Of_CanTp_set_blocks_to_next_cts", Test_Of_CanTp_set_blocks_to_next_cts},
     { "Test_Of_CanTp_Resume", Test_Of_CanTp_Resume},

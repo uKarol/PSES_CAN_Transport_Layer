@@ -156,7 +156,7 @@ static Std_ReturnType CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint32
 
 
 //TODO
-static Std_ReturnType CanTp_SendFlowControl( uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime );
+static Std_ReturnType CanTp_SendFlowControl( PduIdType ID, uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime );
 
 
 
@@ -395,7 +395,7 @@ void CanTp_MainFunction ( void ){
 
 
                 //[SWS_CanTp_00224]
-                if(CanTp_SendFlowControl(block_size, FC_CTS, separation_time) == E_NOT_OK){
+                if(CanTp_SendFlowControl(CanTp_StateVariables.CanTp_Current_RxId, block_size, FC_CTS, separation_time) == E_NOT_OK){
  // 4   - resetowanie recievera jeżeli SendFlowControl zwróci błąd                   
                     CanTp_Reset_Rx_State_Variables();
                 }
@@ -424,7 +424,7 @@ void CanTp_MainFunction ( void ){
                 }
                 else{
                     // [SWS_CanTp_00341]
-                    if(CanTp_SendFlowControl(block_size, FC_WAIT, separation_time) == E_NOT_OK){
+                    if(CanTp_SendFlowControl(CanTp_StateVariables.CanTp_Current_RxId, block_size, FC_WAIT, separation_time) == E_NOT_OK){
 // 4   - resetowanie recievera jeżeli SendFlowControl zwróci błąd
                         CanTp_Reset_Rx_State_Variables();
                     }
@@ -816,7 +816,7 @@ static Std_ReturnType CanTp_PrepareSegmenetedFrame(CanPCI_Type *CanPCI, PduInfoT
     return ret;
 }
 
-static Std_ReturnType CanTp_SendFlowControl( uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime ){
+static Std_ReturnType CanTp_SendFlowControl( PduIdType ID, uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime ){
 
     /*
         TO DO
@@ -837,13 +837,48 @@ static Std_ReturnType CanTp_SendFlowControl( uint8 BlockSize, FlowControlStatus_
         Jeżeli którakolwiek z wyżej wymienionych funkcji zwróci E_NOT_OK, należy przerwać działanie funkcji i też zwrócić E_NOT_OK
         Jeżeli wszystko przejdzie bez bledow, należy zwrocick E_OK
 
-
-
-
     */
 
+    Std_ReturnType ret = E_OK;
+    PduInfoType PduInfoPtr;
+    CanPCI_Type CanPCI;
+    uint8 payloadx[8];
+    uint8 *MetaDataPtr;
+    uint8 SduDataPtr[8];
+    CanPCI.frame_type = FC;
+    CanPCI.FS = FC_Status;
+    CanPCI.BS = BlockSize;
+    CanPCI.ST = SeparationTime;
+    PduInfoPtr.SduLength = 0;
+    PduInfoPtr.MetaDataPtr = MetaDataPtr;
+    PduInfoPtr.SduDataPtr = SduDataPtr;
 
-    return E_OK;
+   if(( FC_Status == FC_OVFLW )||
+      ( FC_Status == FC_WAIT  )||
+      ( FC_Status == FC_CTS   ))
+    {
+       CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payloadx );
+        ret = CanIf_Transmit(ID, &PduInfoPtr);
+        if( ret == E_NOT_OK ){
+            CanTp_Reset_Rx_State_Variables();
+            PduR_CanTpRxIndication(ID, E_NOT_OK);
+        }
+        else{
+            CanTp_TimerStart(&N_Ar_timer);
+            if(FC_Status == FC_CTS){
+                CanTp_TimerStart(&N_Cr_timer);
+            }
+            else if( FC_Status == FC_WAIT ){
+                CanTp_TimerStart(&N_Br_timer);
+            }
+        }
+        
+    }
+    else{
+       ret = E_NOT_OK; 
+    }
+
+    return ret;
 }
 
 // reset all state variables 
@@ -1009,7 +1044,7 @@ static void CanTp_FirstFrameReception(PduIdType RxPduId, const PduInfoType *PduI
 
         // enough space to send message, send CTS ans wait for CF
         if( current_block_size > 0){    
-            CanTp_SendFlowControl( current_block_size, FC_CTS, DEFAULT_ST );   
+            CanTp_SendFlowControl(CanTp_StateVariables.CanTp_Current_RxId, current_block_size, FC_CTS, DEFAULT_ST );   
             CanTp_set_blocks_to_next_cts( current_block_size );
             CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING; // After Successfull Reception of FF, wait for Consecutive Frames
               
@@ -1017,7 +1052,7 @@ static void CanTp_FirstFrameReception(PduIdType RxPduId, const PduInfoType *PduI
         // there is no space in buffer, wait for space until timeout
         else{
             CanTp_set_blocks_to_next_cts( current_block_size );
-            CanTp_SendFlowControl( current_block_size, FC_WAIT, DEFAULT_ST );   
+            CanTp_SendFlowControl(CanTp_StateVariables.CanTp_Current_RxId, current_block_size, FC_WAIT, DEFAULT_ST );   
             CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED; // After Successfull Reception of FF, wait for Consecutive Frames
            
         }
@@ -1028,7 +1063,7 @@ static void CanTp_FirstFrameReception(PduIdType RxPduId, const PduInfoType *PduI
         /*
         [SWS_CanTp_00318] ⌈After the reception of a First Frame, if the function PduR_CanTpStartOfReception()returns BUFREQ_E_OVFL to the CanTp module, 
         the CanTp module shall send a Flow Control N-PDU with overflow status (FC(OVFLW)) and abort the N-SDU reception. */
-        CanTp_SendFlowControl( current_block_size, FC_OVFLW, DEFAULT_ST );
+        CanTp_SendFlowControl(CanTp_StateVariables.CanTp_Current_RxId, current_block_size, FC_OVFLW, DEFAULT_ST );
         CanTp_Reset_Rx_State_Variables();
         CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
     }
@@ -1146,7 +1181,7 @@ static void CanTp_ConsecutiveFrameReception(PduIdType RxPduId, CanPCI_Type *Can_
                         */
                         CanTp_TimerStart(&N_Cr_timer);
                         if(CanTp_StateVariables.blocks_to_next_cts == 0 ){
-                            CanTp_SendFlowControl( current_block_size, FC_CTS, DEFAULT_ST );
+                            CanTp_SendFlowControl(CanTp_StateVariables.CanTp_Current_RxId, current_block_size, FC_CTS, DEFAULT_ST );
                             CanTp_set_blocks_to_next_cts( current_block_size );
                         }
                         CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;         
@@ -1154,7 +1189,7 @@ static void CanTp_ConsecutiveFrameReception(PduIdType RxPduId, CanPCI_Type *Can_
                     }
                     else{
                         CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED;
-                        CanTp_SendFlowControl( current_block_size, FC_WAIT, DEFAULT_ST ); 
+                        CanTp_SendFlowControl(CanTp_StateVariables.CanTp_Current_RxId, current_block_size, FC_WAIT, DEFAULT_ST ); 
                     }
                 }
 
