@@ -1759,6 +1759,19 @@ void Test_Of_CanTp_SendFirstFrame(void){
   TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg1_val == E_NOT_OK);
 }
 
+
+
+
+// TODO
+void TestOf_CanTp_ResetTxStateVariables(void){
+  /*Test funkcji do resetowania zmiennej stanu nadajnika */
+}
+
+// TODO Test funkcji CanTp_Transmit
+void TestOf_CanTp_Transmit(void){
+
+}
+
 /*
   Lista testów - wpisz tutaj wszystkie funkcje które mają być wykonane jako testy.
 */

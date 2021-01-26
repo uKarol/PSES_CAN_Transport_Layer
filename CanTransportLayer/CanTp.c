@@ -125,7 +125,7 @@ CanTp_Timer_type N_Cr_timer = {TIMER_NOT_ACTIVE, 0, N_CR_TIMEOUT_VAL};
 
 CanTp_Timer_type N_As_timer = {TIMER_NOT_ACTIVE, 0, N_AS_TIMEOUT_VAL};
 CanTp_Timer_type N_Bs_timer = {TIMER_NOT_ACTIVE, 0, N_BS_TIMEOUT_VAL};
-
+CanTp_Timer_type N_Cs_timer = {TIMER_NOT_ACTIVE, 0, N_CS_TIMEOUT_VAL};
 
 uint32 FC_Wait_frame_ctr;
 
@@ -154,6 +154,7 @@ static Std_ReturnType CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* 
 static Std_ReturnType CanTp_SendFirstFrame(PduIdType id, uint32 message_lenght);
 static Std_ReturnType CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint32 size);
 
+static void CanTp_ResetTxStateVariables(void);
 
 //TODO
 static Std_ReturnType CanTp_SendFlowControl( PduIdType ID, uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime );
@@ -242,6 +243,10 @@ void CanTp_Shutdown ( void );
 */
 Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr ){
 
+    BufReq_ReturnType BufReq_State;
+    PduLengthType Pdu_Len;
+    Std_ReturnType ret;
+
     /*
     PduInfoPtr dobra na razie nie mam pojęcie co to za gówno, ale mam nadzieje,
     że siedzę tam same interesujące nas informacje 
@@ -249,17 +254,42 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
     //Get_Length()
 
     if( CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT){
-        
-        // to do sprawdzic dlugosc 
-
-        // jezeli ponizej 8B, wyslac jako SingleFrame
-        // nie ruszac pozostalych zmiennych stanu!
-
-
-        // jeżeli powyżej 7B, potraktować jako FirstFrame 
-        // nalezy uzupelnic zmienne stanu 
-        // stan -> TX_PROCESSING_SUSPENDED
-
+        if(PduInfoPtr->SduLength < 8){
+            //Send signle frame
+            // TODO: Sprawdzić 3 argument fnkcji - PduR_CanTpCopyRxData oczekuje PduLenghtType - skąd wziac tą długosc
+            Pdu_Len = (PduLengthType)CanTp_Tx_StateVariables.message_legth;
+            //Pdu_Len = (PduLengthType)PduInfoType->SduLenght;
+            BufReq_State = PduR_CanTpCopyTxData(TxPduId, PduInfoPtr, NULL, &Pdu_Len);
+            if(BufReq_State == BUFREQ_OK){
+                ret == E_OK;
+            }
+            else if(BufReq_State == BUFREQ_E_NOT_OK){
+                //TODO: przerwanie transmisji
+                CanTp_CancelTransmit(TxPduId);
+                // CanTo_ResetTxStateVariables();  \\ wywołanie tej funckji?
+                ret = E_NOT_OK;
+            }
+            else if(BufReq_State == BUFREQ_BUSY) {
+                //TODO Obsługa zajętego bufora
+            }
+            else if(BufReq_State == BUFREQ_OVFL){
+                //TODO: nie wiadomo co zrobić jeżeli overflow
+            }
+        }
+        else{
+            //Send First Frame
+            if(CanTp_SendFirstFrame(TxPduId, PduInfoPtr->SduLength == E_OK)){
+                //Transmiter przechodzi w stan Processing_suspended
+                CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING_SUSPENDED;
+                CanTp_Tx_StateVariables.message_legth = PduInfoPtr->SduLength;
+                CanTp_Tx_StateVariables.sent_bytes = 0;
+                ret = E_OK;
+            }
+            else{
+                //TODO: Obsługa błedu funkcji SendFirstFrame 
+                ret = E_NOT_OK;
+            }
+        }
     }
     else{
         /*
@@ -1237,4 +1267,20 @@ static void CanTp_ConsecutiveFrameReception(PduIdType RxPduId, CanPCI_Type *Can_
 
 static void CanTp_FlowControlReception(PduIdType RxPduId, CanPCI_Type *Can_PCI){
 
+}
+
+
+//Funkcja do resetowania zmienne stanu nadajnika
+static void CanTp_ResetTxStateVariables(void){
+    CanTp_Tx_StateVariables.sent_bytes = 0;
+    CanTp_Tx_StateVariables.message_legth = 0;
+    CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+    CanTp_Tx_StateVariables.CanTp_Current_TxId = 0;
+    CanTp_Tx_StateVariables.blocks_to_fc = 0;
+
+
+    //Resetowanie timerów:
+    CanTp_TimerReset(&N_As_timer);
+    CanTp_TimerReset(&N_Bs_timer);
+    CanTp_TimerReset(&N_Cs_timer);
 }
