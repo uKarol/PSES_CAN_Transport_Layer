@@ -256,24 +256,23 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
     if( CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT){
         if(PduInfoPtr->SduLength < 8){
             //Send signle frame
-            // TODO: Sprawdzić 3 argument fnkcji - PduR_CanTpCopyRxData oczekuje PduLenghtType - skąd wziac tą długosc
-            Pdu_Len = (PduLengthType)CanTp_Tx_StateVariables.message_legth;
-            //Pdu_Len = (PduLengthType)PduInfoType->SduLenght;
             BufReq_State = PduR_CanTpCopyTxData(TxPduId, PduInfoPtr, NULL, &Pdu_Len);
             if(BufReq_State == BUFREQ_OK){
                 ret == E_OK;
             }
             else if(BufReq_State == BUFREQ_E_NOT_OK){
-                //TODO: przerwanie transmisji
-                CanTp_CancelTransmit(TxPduId);
-                // CanTo_ResetTxStateVariables();  \\ wywołanie tej funckji?
+                //CanTp_CancelTransmit(TxPduId);
+                CanTp_ResetTxStateVariables();  
+                PduR_CanTpTxConfirmation(TxPduId, E_NOT_OK);
                 ret = E_NOT_OK;
             }
             else if(BufReq_State == BUFREQ_BUSY) {
-                //TODO Obsługa zajętego bufora
+                //Start N_Cs timer
+                CanTp_TimerStart(&N_Cs_timer);
             }
             else if(BufReq_State == BUFREQ_OVFL){
-                //TODO: nie wiadomo co zrobić jeżeli overflow
+                //Start N_Cs timer
+                CanTp_TimerStart(&N_Cs_timer);
             }
         }
         else{
@@ -297,9 +296,7 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
         ale raczej blad, tak wiec uwaga na razie nie ruszac  
         */
     }
-
-
-
+    return ret;
 }
 
 /**

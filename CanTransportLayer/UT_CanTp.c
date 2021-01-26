@@ -1765,6 +1765,22 @@ void Test_Of_CanTp_SendFirstFrame(void){
 // TODO
 void TestOf_CanTp_ResetTxStateVariables(void){
   /*Test funkcji do resetowania zmiennej stanu nadajnika */
+
+    //Set TxStateVariable
+    CanTp_Tx_StateVariables.blocks_to_fc = 1;
+    CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+    CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
+    CanTp_Tx_StateVariables.message_legth = 1;
+    CanTp_Tx_StateVariables.sent_bytes = 1;
+
+    //Call function
+    CanTp_ResetTxStateVariables();
+    
+    TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+    TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 0);
+    TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+    TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 0);
+    TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 0);
 }
 
 // TODO Test funkcji CanTp_Transmit
@@ -1791,6 +1807,7 @@ TEST_LIST = {
     { "Test_Of_CanTp_ConsecutiveFrame", Test_Of_CanTp_SendConsecutiveFrame},
     { "Test_Of_CanTp_FirstFrame", Test_Of_CanTp_SendFirstFrame},
     { "Test_Of_CanTp_RxIndication_CF", Test_Of_CanTp_RxIndication_CF},
+    {"TestOf_CanTp_ResetTxStateVariables", TestOf_CanTp_ResetTxStateVariables},
     //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
     { NULL, NULL }                                      /* To musi być na końcu */
 };
