@@ -471,45 +471,54 @@ void CanTp_MainFunction ( void ){
 void CanTp_TxConfirmation ( PduIdType TxPduId, Std_ReturnType result ){
 
 
-    /* TO DO 
+    /*
 
-    funkcja jest wywoływana przez niższą warstwę i informuje nas o statusie operacji wysyłania
+        funkcja jest wywoływana przez niższą warstwę i informuje nas o statusie operacji wysyłania
+        w wypadku błędu przerwać wysyłanie lub odbierania (w zależności od tego co jest aktywne)
+        w przypadku receivera funkcja powinna zatrzymać timer N_Ar, o ile nie będzie błędu
 
-    - E_OK - wysyłanie się udalo (mamy problem)
-    - E_NOT_OK - wysyłanie się nie udało (mamy problem)
+   */
 
-    zatrzymać timery N_Ar i N_Br
+   // receiver  
 
-    sprawdzić zwróconą wartość 
-
-    w wypadku błędu przerwać wysyłanie lub odbierania (w zależności od tego co jest aktywne)
-
-    */
-   
    if(result == E_OK){
-        
-        if( (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING ) || 
-        (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED)){
-            CanTp_TimerReset(&N_Cr_timer);
-        }
-        
-       // CanTp_TimerReset(&N_Cr_timer);
+         CanTp_TimerReset(&N_Ar_timer);   
    }    
    else{
-
-       if( (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING ) || 
-        (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED)){
-            // wyjebka drivera 
-            PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
-            CanTp_Reset_Rx_State_Variables();
+       // w przypadku receivera tylko wysłanie FlowControl aktywuje ten timer, oznacza to, że nie powinien się on wysypać w stanie innym niż PROCESSING
+       if( (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING ) || (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED ) ){
+        PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+        CanTp_Reset_Rx_State_Variables();
        }
-    /*   else if(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING ){
-
-            // CanTp_Tx_StateVariables.ptr
-
-       }
-*/
    }
+
+    // TRASMITER 
+
+    /*
+        W PRZYPADKU TRANSMITERA MAMY PEWNOSC ŻE RAMKA DOSZŁA (O ILE ZWRÓCIŁ OK ) I MOŻNA ŁADOWAĆ KOLEJNĄ 
+
+    */
+
+    if(result == E_OK){
+        // jeżeli poprzednia ramka przeszła 
+        if(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING)
+        {
+               // aktualizuj zmienne stanu
+
+               // sprawdz czy bufor ma miejsce 
+
+               // kopiuj dane
+
+               // sprawdz czy bufor sie nie wypierdolil 
+
+               // wyślij ramke
+
+               
+               
+
+        }
+
+    }
 
 
 
