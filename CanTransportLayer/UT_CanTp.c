@@ -1785,7 +1785,116 @@ void TestOf_CanTp_ResetTxStateVariables(void){
 
 // TODO Test funkcji CanTp_Transmit
 void TestOf_CanTp_Transmit(void){
+  PduIdType PduId = 0x01;
+  PduInfoType PduInfo;
+  uint8 SduDataPtr[8];
+  uint8 *MetaDataPtr;
+  PduInfo.MetaDataPtr = MetaDataPtr;
+  PduInfo.SduDataPtr = SduDataPtr;
+  Std_ReturnType ret; 
 
+  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_NOT_OK, E_NOT_OK};
+  SET_RETURN_SEQ(CanIf_Transmit, CanIf_Transmit_retv, 3);
+
+  BufReq_ReturnType PduR_CanTpCopyTxData_retv[] = {BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_BUSY, BUFREQ_OVFL};
+  SET_RETURN_SEQ(PduR_CanTpCopyTxData, PduR_CanTpCopyTxData_retv, 4);
+
+  
+
+  //TEST1: 
+  //Tx w stanei WAIT, SduLenght < 8, CanTpCopyTx zwraca BUFREQ_OK
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+  PduInfo.SduLength = 7;
+  //Ustawienie niezerowej zmiennej środowiskowej
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+
+  ret = CanTp_Transmit(PduId, &PduInfo);
+  //Zwrócona wartość powinna wynosic E_OK
+  TEST_CHECK(ret == E_OK);
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 1);
+  //Sprawdzenie argumentów funckji CanTpCopyData
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.arg0_val == PduId);
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.arg1_val == &PduInfo);
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.arg2_val == NULL);
+  //4 argument funkcji jest bez znaczenia
+  //Zmienna stanu nie powinna się zmienic
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 1); //sprawdzenie czy ID sie nie zmieniclo
+  
+
+  //TEST2: 
+  //Tx w stanei WAIT, SduLenght < 8, CanTpCopyTx zwraca BUFREQ_E_NOT_OK
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+  PduInfo.SduLength = 7;
+  //Ustawienie niezerowej zmiennej środowiskowej
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+
+  ret = CanTp_Transmit(PduId, &PduInfo);
+  //Zwrócona wartość powinna wynosic E_OK
+  TEST_CHECK(ret == E_NOT_OK);
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 2);
+  //Zmienna stanu powinna zostac zresetowana 
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 0);
+  //Powinien zostać wysłany TpTxConfirmation z E_NOT_OK
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 1);
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg1_val == E_NOT_OK);
+
+  //TEST3: 
+  //Tx w stanei WAIT, SduLenght < 8, CanTpCopyTx zwraca BUFREQ_BUSY
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+  PduInfo.SduLength = 7;
+  CanTp_TimerReset(&N_Cs_timer); //Zresetowanie timera
+  ret = CanTp_Transmit(PduId, &PduInfo);
+  //Zwrócona wartość powinna wynosic E_OK
+  TEST_CHECK(ret == E_OK);
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 3); 
+  //Timer N_Cs powinien zostac aktywowany
+  TEST_CHECK(N_Cs_timer.state == TIMER_ACTIVE);
+
+  //TEST4: 
+  //Tx w stanei WAIT, SduLenght < 8, CanTpCopyTx zwraca BUFREQ_OVFL
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+  PduInfo.SduLength = 7;
+  CanTp_TimerReset(&N_Cs_timer); //Zresetowanie timera
+  ret = CanTp_Transmit(PduId, &PduInfo);
+  //Zwrócona wartość powinna wynosic E_OK
+  TEST_CHECK(ret == E_OK);
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 4); 
+  //Timer N_Cs powinien zostac aktywowany
+  TEST_CHECK(N_Cs_timer.state == TIMER_ACTIVE);
+
+
+  //TEST5: 
+  //Tx w stanei WAIT, SduLenght >= 8, CanTpSenFirst Frame zwraca E_OK
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+  PduInfo.SduLength = 1000;
+  ret = CanTp_Transmit(PduId, &PduInfo);
+  //Zwrócona wartość powinna wynosic E_OK
+  TEST_CHECK(ret == E_OK);
+  //Funcja CanTpCopyTxData nie powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 4);
+  //Trasniter powinien przejsć w trym PROCESSING_SUSPEBDEDB
+  TEST_CHECK(CanIf_Transmit_fake.return_val == E_OK);
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING_SUSPENDED);
+  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == PduInfo.SduLength);
+  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 0);
+  
+  //TEST6: 
+  //Tx w stanei WAIT, SduLenght >= 8, CanTpSenFirst Frame zwraca E_NOT_OK
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+  PduInfo.SduLength = 1000;
+  ret = CanTp_Transmit(PduId, &PduInfo);
+  //Zwrócona wartość powinna wynosic E_OK
+  TEST_CHECK(ret == E_NOT_OK);
+  //Funcja CanTpCopyTxData nie powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 4);
+  //Trasniter powinien ppozostać w stanie CANTP_TX_WAIT
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
 }
 
 /*
@@ -1808,6 +1917,7 @@ TEST_LIST = {
     { "Test_Of_CanTp_FirstFrame", Test_Of_CanTp_SendFirstFrame},
     { "Test_Of_CanTp_RxIndication_CF", Test_Of_CanTp_RxIndication_CF},
     {"TestOf_CanTp_ResetTxStateVariables", TestOf_CanTp_ResetTxStateVariables},
+    {"TestOf_CanTp_Transmit", TestOf_CanTp_Transmit},
     //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
     { NULL, NULL }                                      /* To musi być na końcu */
 };

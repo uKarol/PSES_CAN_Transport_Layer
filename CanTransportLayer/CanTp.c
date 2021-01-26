@@ -245,7 +245,7 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
 
     BufReq_ReturnType BufReq_State;
     PduLengthType Pdu_Len;
-    Std_ReturnType ret;
+    Std_ReturnType ret = E_OK;
 
     /*
     PduInfoPtr dobra na razie nie mam pojęcie co to za gówno, ale mam nadzieje,
@@ -258,7 +258,7 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
             //Send signle frame
             BufReq_State = PduR_CanTpCopyTxData(TxPduId, PduInfoPtr, NULL, &Pdu_Len);
             if(BufReq_State == BUFREQ_OK){
-                ret == E_OK;
+                ret = E_OK;
             }
             else if(BufReq_State == BUFREQ_E_NOT_OK){
                 //CanTp_CancelTransmit(TxPduId);
@@ -269,28 +269,38 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
             else if(BufReq_State == BUFREQ_BUSY) {
                 //Start N_Cs timer
                 CanTp_TimerStart(&N_Cs_timer);
+                //CHECK:  Jaka powinna być zwracana wartosć
+                ret = E_OK;
             }
             else if(BufReq_State == BUFREQ_OVFL){
                 //Start N_Cs timer
                 CanTp_TimerStart(&N_Cs_timer);
+                //CHECK: 
+                ret = E_OK;
             }
         }
         else{
             //Send First Frame
-            if(CanTp_SendFirstFrame(TxPduId, PduInfoPtr->SduLength == E_OK)){
+            if(CanTp_SendFirstFrame(TxPduId, PduInfoPtr->SduLength) == E_OK){
                 //Transmiter przechodzi w stan Processing_suspended
-                CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING_SUSPENDED;
+                CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
                 CanTp_Tx_StateVariables.message_legth = PduInfoPtr->SduLength;
                 CanTp_Tx_StateVariables.sent_bytes = 0;
                 ret = E_OK;
             }
             else{
                 //TODO: Obsługa błedu funkcji SendFirstFrame 
+                /*  Przrwać transmisję: 
+                CanTp_ResetTxStateVariables();  
+                PduR_CanTpTxConfirmation(TxPduId, E_NOT_OK);
+                 Czy wystarczy tylko zwrócić E_NOT_OK?  */ 
                 ret = E_NOT_OK;
             }
         }
     }
     else{
+        //TODO: Czy zwrócić E_NOT_OK?
+        //ret = E_NOT_OK;
         /*
         Na chwile obecna brak pewnosci 
         ale raczej blad, tak wiec uwaga na razie nie ruszac  
