@@ -8,7 +8,10 @@
 #include "Std_Types.h"
 
 #include "CanTp.c"  
+
 #include <stdio.h>
+
+#include <string.h>
 
 #include "fff.h"
 
@@ -36,8 +39,18 @@ BufReq_ReturnType PduR_CanTpCopyRxData_FF ( PduIdType id, const PduInfoType* inf
     return PduR_CanTpCopyRxData_fake.return_val_seq[i];
 }
 
+uint8 PduR_CanTpCopyTxData_sdu_data[20][7]; // a co, stac nas ;)
+PduLengthType *PduR_CanTpCopyTxData_availableDataPtr; 
+
 BufReq_ReturnType PduR_CanTpCopyTxData_FF ( PduIdType id, const PduInfoType* info, const RetryInfoType* retry, PduLengthType* availableDataPtr ){
-  // to be continued
+    static int i = 0;
+    int loop_ctr;
+    i = PduR_CanTpCopyTxData_fake.call_count - 1;
+    for( loop_ctr = 0; loop_ctr < info->SduLength; loop_ctr++ ){
+      info->SduDataPtr[loop_ctr] = PduR_CanTpCopyTxData_sdu_data[i][loop_ctr];
+    }
+    *availableDataPtr = PduR_CanTpCopyTxData_availableDataPtr[i];
+    return PduR_CanTpCopyTxData_fake.return_val_seq[i];
 }
 
 PduLengthType *PduR_CanTpStartOfReception_buffSize_array;
@@ -55,6 +68,54 @@ BufReq_ReturnType PduR_CanTpStartOfReception_FF (PduIdType id, const PduInfoType
 
 
 // tests of custom FF
+void Test_Of_PduR_CanTpCopyTxData_FF(void){
+  PduLengthType availableDataPtr_array_local[10] = {1,2,3,4,5,6,7,8,9,0};
+  uint8 sdu_data_ptr_array[3][7] = { "marszal", "ek prog", "ramuje " };
+   BufReq_ReturnType BufferReturnVals[10] = { BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_BUSY};
+
+  uint8_t sdu[8];
+
+  PduInfoType info;
+  PduIdType id = 0;
+  PduLengthType availableData;
+  info.SduDataPtr = sdu;
+  info.MetaDataPtr = NULL;
+  info.SduLength = 7; 
+int i;
+
+  for( i = 0; i < 3; i++){
+   memcpy(PduR_CanTpCopyTxData_sdu_data[i], sdu_data_ptr_array[i], sizeof(uint8)*7);
+  }
+
+  PduR_CanTpCopyTxData_availableDataPtr = availableDataPtr_array_local;
+
+  RESET_FAKE( PduR_CanTpCopyTxData);
+
+  PduR_CanTpCopyTxData_fake.custom_fake = PduR_CanTpCopyTxData_FF;
+  SET_RETURN_SEQ(PduR_CanTpCopyTxData, BufferReturnVals, 3 );
+
+  PduR_CanTpCopyTxData(id, &info, NULL, &availableData);
+  TEST_CHECK(availableData == 1);
+ 
+  for( i = 0; i<7; i++){
+    TEST_CHECK(info.SduDataPtr[i] == sdu_data_ptr_array[0][i]);
+  }
+
+  PduR_CanTpCopyTxData(id, &info, NULL, &availableData);
+  TEST_CHECK(availableData == 2);
+ 
+  for( i = 0; i<7; i++){
+    TEST_CHECK(info.SduDataPtr[i] == sdu_data_ptr_array[1][i]);
+  }
+
+  PduR_CanTpCopyTxData(id, &info, NULL, &availableData);
+  TEST_CHECK(availableData == 3);
+ 
+  for( i = 0; i<7; i++){
+    TEST_CHECK(info.SduDataPtr[i] == sdu_data_ptr_array[2][i]);
+  }
+
+}
 
 void Test_Of_Custom_FFs(void){
 
@@ -144,6 +205,9 @@ void Test_Of_CanTp_Reset_Rx_State_Variables(){
     TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
     TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
     TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 0);
+    TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE);
+    TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE);
+    TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE);
 
 }
 
@@ -1901,6 +1965,7 @@ void TestOf_CanTp_Transmit(void){
   Lista testów - wpisz tutaj wszystkie funkcje które mają być wykonane jako testy.
 */
 TEST_LIST = {
+    { "Test_Of_PduR_CanTpCopyTxData_FF",Test_Of_PduR_CanTpCopyTxData_FF},
     { "Test_Of_CanTp_FrameCheckType", Test_Of_CanTp_FrameCheckType },   /* Format to { "nazwa testu", nazwa_funkcji } */
     { "Test_Of_CanTp_PrepareSegmenetedFrame", Test_Of_CanTp_PrepareSegmenetedFrame },
     { "Test_Of_Custom_FFs", Test_Of_Custom_FFs},

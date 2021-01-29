@@ -261,21 +261,13 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
                 ret = E_OK;
             }
             else if(BufReq_State == BUFREQ_E_NOT_OK){
-                //CanTp_CancelTransmit(TxPduId);
                 CanTp_ResetTxStateVariables();  
                 PduR_CanTpTxConfirmation(TxPduId, E_NOT_OK);
                 ret = E_NOT_OK;
             }
-            else if(BufReq_State == BUFREQ_BUSY) {
+            else {
                 //Start N_Cs timer
                 CanTp_TimerStart(&N_Cs_timer);
-                //CHECK:  Jaka powinna być zwracana wartosć
-                ret = E_OK;
-            }
-            else if(BufReq_State == BUFREQ_OVFL){
-                //Start N_Cs timer
-                CanTp_TimerStart(&N_Cs_timer);
-                //CHECK: 
                 ret = E_OK;
             }
         }
@@ -936,6 +928,12 @@ static void CanTp_Reset_Rx_State_Variables(){
     CanTp_StateVariables.sended_bytes = 0;
     CanTp_StateVariables.blocks_to_next_cts = 0;
     CanTp_StateVariables.CanTp_Current_RxId = 0;
+
+    //Resetowanie timerów:
+    CanTp_TimerReset(&N_Ar_timer);
+    CanTp_TimerReset(&N_Br_timer);
+    CanTp_TimerReset(&N_Cr_timer);
+
 }
 
 // resume CanTp
