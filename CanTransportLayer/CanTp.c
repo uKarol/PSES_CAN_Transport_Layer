@@ -89,6 +89,7 @@ typedef struct{
     PduIdType CanTp_Current_TxId;       // id procesowanej wiadomosci 
     uint16 sent_bytes;                  // nuber of sent bytes 
     uint16 message_legth;               // length of message 
+    uint8_t next_SN;
     uint16 blocks_to_fc;                // number of block between flow control
     /*
         uwaga a ostatnie pole, może być nie do końca oczywiste 
@@ -159,7 +160,7 @@ static void CanTp_ResetTxStateVariables(void);
 //TODO
 static Std_ReturnType CanTp_SendFlowControl( PduIdType ID, uint8 BlockSize, FlowControlStatus_type FC_Status, uint8 SeparationTime );
 
-
+static void CanTp_SendNextCF();
 
 
 
@@ -246,19 +247,22 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
     BufReq_ReturnType BufReq_State;
     PduLengthType Pdu_Len;
     Std_ReturnType ret = E_OK;
-
-    /*
-    PduInfoPtr dobra na razie nie mam pojęcie co to za gówno, ale mam nadzieje,
-    że siedzę tam same interesujące nas informacje 
-    */
-    //Get_Length()
+    
+    PduInfoType Temp_Pdu;
+    uint8_t payload[8];
+    Temp_Pdu.SduDataPtr = payload;
+    Temp_Pdu.MetaDataPtr = NULL;
+    
 
     if( CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT){
         if(PduInfoPtr->SduLength < 8){
             //Send signle frame
-            BufReq_State = PduR_CanTpCopyTxData(TxPduId, PduInfoPtr, NULL, &Pdu_Len);
+            Temp_Pdu.SduLength = PduInfoPtr->SduLength;
+            BufReq_State = PduR_CanTpCopyTxData(TxPduId, &Temp_Pdu, NULL, &Pdu_Len);
             if(BufReq_State == BUFREQ_OK){
-                ret = E_OK;
+
+               ret = CanTp_SendSingleFrame(TxPduId, Temp_Pdu.SduDataPtr, PduInfoPtr->SduLength );
+
             }
             else if(BufReq_State == BUFREQ_E_NOT_OK){
                 CanTp_ResetTxStateVariables();  
@@ -275,6 +279,7 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
             //Send First Frame
             if(CanTp_SendFirstFrame(TxPduId, PduInfoPtr->SduLength) == E_OK){
                 //Transmiter przechodzi w stan Processing_suspended
+                CanTp_Tx_StateVariables.Cantp_TxState = TxPduId;
                 CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
                 CanTp_Tx_StateVariables.message_legth = PduInfoPtr->SduLength;
                 CanTp_Tx_StateVariables.sent_bytes = 0;
@@ -532,24 +537,10 @@ void CanTp_TxConfirmation ( PduIdType TxPduId, Std_ReturnType result ){
         // jeżeli poprzednia ramka przeszła 
         if(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING)
         {
-               // aktualizuj zmienne stanu
-
-               // sprawdz czy bufor ma miejsce 
-
-               // kopiuj dane
-
-               // sprawdz czy bufor sie nie wypierdolil 
-
-               // wyślij ramke
-
-               
-               
-
+               CanTp_SendNextCF();               
         }
 
     }
-
-
 
 }
 
@@ -1003,6 +994,77 @@ static Std_ReturnType  CanTp_SendSingleFrame(PduIdType id, uint8* payload, uint3
 }
 
 
+static void CanTp_SendNextCF(){
+
+    // funkcja moze byc wywolana z kilku roznych miejsc wiec powinna byc maksymalnie zautomatyzowana 
+    // workflow, sprawdzamy czy ilosc wyslanych danych == rozmiar wiadomosci 
+    // jeżeli tak to informujemy PduR o powodzeniu wysylania 
+    // jeżeli nie to kopiujemy dane i przygotowujemy ramkę do wysyłania 
+    // sprawdzamy stan powyzszych opercji 
+    // jezeli wszystko ok, to wysylamy ramke 
+    // jezeli nie ok no to mamy problem 
+    // za kazdym razem updatujemy zmienne stanu
+
+    BufReq_ReturnType BufReq_State;
+    PduInfoType PduInfoPtr;
+    PduLengthType Pdu_Len;
+    Std_ReturnType ret;
+    uint8 bytes_to_send;
+    uint8_t payload[8];
+
+    PduInfoPtr.SduDataPtr = payload;
+    PduInfoPtr.MetaDataPtr = NULL;
+    
+
+    if( CanTp_Tx_StateVariables.sent_bytes == CanTp_Tx_StateVariables.message_legth ){
+        // cala wiadomosc zostala wyslana 
+    }
+    else{
+        // wysylamy dalej 
+        if(CanTp_Tx_StateVariables.message_legth - CanTp_Tx_StateVariables.sent_bytes < 7) bytes_to_send = CanTp_Tx_StateVariables.message_legth - CanTp_Tx_StateVariables.sent_bytes;
+        else bytes_to_send = 7;
+        PduInfoPtr.SduLength = bytes_to_send;
+
+        BufReq_State = PduR_CanTpCopyTxData(CanTp_Tx_StateVariables.CanTp_Current_TxId, &PduInfoPtr, NULL, &Pdu_Len);
+        if(BufReq_State == BUFREQ_OK){
+            
+
+            ret = CanTp_SendConsecutiveFrame(CanTp_Tx_StateVariables.CanTp_Current_TxId, CanTp_Tx_StateVariables.next_SN, PduInfoPtr.SduDataPtr, bytes_to_send);
+
+            if( ret == E_OK ){
+                CanTp_Tx_StateVariables.sent_bytes = CanTp_Tx_StateVariables.sent_bytes + bytes_to_send;
+                CanTp_Tx_StateVariables.blocks_to_fc--;
+                CanTp_Tx_StateVariables.next_SN = (CanTp_Tx_StateVariables.next_SN + 1)%7;
+                if(CanTp_Tx_StateVariables.blocks_to_fc == 0) CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
+                else CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING;        
+
+            }
+            else{
+                CanTp_ResetTxStateVariables();
+            }
+            
+
+        }
+        else if(BufReq_State == BUFREQ_E_NOT_OK){
+            
+            PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_NOT_OK);
+            CanTp_ResetTxStateVariables();  
+            
+        }
+        else { // BUSY
+            //Start N_Cs timer
+            CanTp_TimerStart(&N_Cs_timer);
+            CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
+        }
+
+
+
+    }
+
+
+}
+
+
 static Std_ReturnType CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* payload, uint32 size){
     //Create and Init PduInfo 
     PduInfoType PduInfo;
@@ -1010,8 +1072,12 @@ static Std_ReturnType CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* 
     uint8 *MetaDataPtr;
     PduInfo.MetaDataPtr = MetaDataPtr;
     PduInfo.SduDataPtr = SduDataPtr;
+    PduInfo.SduLength = size;
+    CanPCI_Type CanPCI;// = {CF, size, SN, 0, 0, 0};
 
-    CanPCI_Type CanPCI = {CF, size, SN, 0, 0, 0};
+    CanPCI.frame_type = CF;
+    CanPCI.SN = SN;
+
     Std_ReturnType ret = E_OK;
     //Przygotowanie PDU
     CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfo, payload);
@@ -1271,7 +1337,47 @@ static void CanTp_ConsecutiveFrameReception(PduIdType RxPduId, CanPCI_Type *Can_
 }
 
 static void CanTp_FlowControlReception(PduIdType RxPduId, CanPCI_Type *Can_PCI){
+    
 
+    if( CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING_SUSPENDED ){
+        /*
+        [SWS_CanTp_00057] ⌈If unexpected frames are received, the CanTp module shall
+        behave according to the table below. This table specifies the N-PDU handling
+        considering the current CanTp internal status (CanTp status). ⌋ (SRS_Can_01082)
+        It must be understood, that the received N-PDU contains the same address
+        information (N_AI) as the reception or transmission, which may be in progress at the
+        time the N_PDU is received.
+        */
+        if(CanTp_Tx_StateVariables.CanTp_Current_TxId == RxPduId ){ // check ID
+            if(Can_PCI->FS == FC_CTS){
+                CanTp_Tx_StateVariables.blocks_to_fc = Can_PCI->BS; 
+                CanTp_SendNextCF();
+            }   
+            else if( Can_PCI->FS == FC_WAIT ){
+                /* only reset timer */
+            }
+            else if( Can_PCI->FS == FC_OVFLW){
+                /*ABORT TRANSMSSION */ 
+
+                /*[SWS_CanTp_00309] ⌈If a FC frame is received with the FS set to OVFLW the CanTp module shall 
+                abort the transmit request and notify the upper layer by calling the callback 
+                function PduR_CanTpTxConfirmation() with the result E_NOT_OK. ⌋ ( )*/
+
+                CanTp_ResetTxStateVariables();
+                PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.Cantp_TxState, E_NOT_OK);
+
+            }
+            else{
+                /* UNKNOWN/INVALID FS */ 
+            }
+        }
+        else{
+            /* IGNORE FRAME WITH UNEXPECTED ID */
+        }
+    }
+    else{   
+        // IGNORE UNEXPECTED FLOW CONTROLL
+    }
 }
 
 
