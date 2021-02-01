@@ -515,16 +515,20 @@ void CanTp_TxConfirmation ( PduIdType TxPduId, Std_ReturnType result ){
 
    // receiver  
     if( CanTp_StateVariables.CanTp_Current_RxId == TxPduId ){
-        if(result == E_OK){
-            CanTp_TimerReset(&N_Ar_timer);   
-        }    
-        else{
-            // w przypadku receivera tylko wysłanie FlowControl aktywuje ten timer, oznacza to, że nie powinien się on wysypać w stanie innym niż PROCESSING
-            if( (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING ) || (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED ) ){
+        if( (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING ) || (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED ) ){
+
+            if(result == E_OK){
+                CanTp_TimerReset(&N_Ar_timer);   
+            }    
+            else{
+                // w przypadku receivera tylko wysłanie FlowControl aktywuje ten timer, oznacza to, że nie powinien się on wysypać w stanie innym niż PROCESSING
                 PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
                 CanTp_Reset_Rx_State_Variables();
             }
         }
+        else{
+            /* IGNORE */
+        } 
     }
 
     // TRASMITER 
@@ -540,11 +544,14 @@ void CanTp_TxConfirmation ( PduIdType TxPduId, Std_ReturnType result ){
             {
                CanTp_SendNextCF();               
             }
+            else{
+                /* olny reset timer */
+            }
         }
         else{
             /*[SWS_CanTp_00355]⌈CanTp shall abort the corrensponding session, 
             when CanTp_TxConfirmation() is called with the result E_NOT_OK.⌋()*/
-            PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_OK);
+            PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_NOT_OK);
             CanTp_ResetTxStateVariables();
 
         }
