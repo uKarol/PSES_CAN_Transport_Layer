@@ -2264,7 +2264,7 @@ void TestOf_CanTp_SendNextCF(void){
   /*
 
   TEST 5
-  copy tx data returns e_busy - communication should be aborted
+  copy tx data returns e_busy - communication should wait for free buffer
 
 */
 
@@ -2306,45 +2306,371 @@ void TestOf_CanTp_SendNextCF(void){
   TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 7);
 
   CanTp_Reset_Rx_State_Variables();
-// /*
-//   TEST4: 
-//   Tx w stanei WAIT, 
-//   SduLenght >= 8, 
-//   CanTpSendFirst Frame zwraca E_OK
-// */
-//   CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
-//   PduInfo.SduLength = 1000;
-//   ret = CanTp_Transmit(PduId, &PduInfo);
-//   //Zwrócona wartość powinna wynosic E_OK
-//   TEST_CHECK(ret == E_OK);
-//   //Funcja CanTpCopyTxData nie powinna zostac wywołana
-//   TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 3);
-//   //Trasniter powinien przejsć w trym PROCESSING_SUSPEBDEDB
-//   TEST_CHECK(CanIf_Transmit_fake.return_val == E_OK);
-//   TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING_SUSPENDED);
-//   TEST_CHECK(CanTp_Tx_StateVariables.message_legth == PduInfo.SduLength);
-//   TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 0);
 
-//   TEST_CHECK(CanIf_Transmit_fake.call_count == 2 ); 
-//   TEST_CHECK(CanIf_Transmit_fake.arg0_val == 1 ); // sprawdzaym z jakimi argumentami funkcja wysylajaca zostala wykonana
-//   TEST_CHECK(CanIf_Transmit_fake.arg1_val->SduDataPtr[0] == 0x13 );
-//   TEST_CHECK(CanIf_Transmit_fake.arg1_val->SduDataPtr[1] == 0xE8 );
-//   TEST_CHECK(N_As_timer.state == TIMER_ACTIVE);
-//   TEST_CHECK(N_Bs_timer.state == TIMER_ACTIVE);
+  /*
+  TEST 6 - finish  of transmission
 
-//   //TEST5: 
-//   //Tx w stanei WAIT, SduLenght >= 8, CanTpSenFirst Frame zwraca E_NOT_OK
-//   CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
-//   PduInfo.SduLength = 1000;
-//   ret = CanTp_Transmit(PduId, &PduInfo);
-//   //Zwrócona wartość powinna wynosic E_OK
-//   TEST_CHECK(ret == E_NOT_OK);
-//   //Funcja CanTpCopyTxData nie powinna zostac wywołana
-//   TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 3);
-//   //Trasniter powinien ppozostać w stanie CANTP_TX_WAIT
-//   TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+  */
+
+   CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING;
+  CanTp_Tx_StateVariables.blocks_to_fc = 1;
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+  CanTp_Tx_StateVariables.message_legth = 100;
+  CanTp_Tx_StateVariables.sent_bytes = 100;
+  CanTp_Tx_StateVariables.next_SN = 0;
+
+  //Ustawienie niezerowej zmiennej środowiskowej
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+
+  CanTp_SendNextCF();
+ 
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 5);
+
+  // sprawdzamy czy CanTpCopyData zostal wywolany z poprawnymi argumentami
+
+  //Sprawdzenie argumentów funckji CanTpCopyData
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.arg0_val == 1);
+
+ 
+  // sprawdzamy czy sen single frame wykonal sie poprawnie 
+
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 3 ); // sprawdzamy czy can tp cos wyslal
+
+  TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE); // sprawdzamy czy timer dziala
+  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE); 
+
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 3);
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg0_val == 1);
+  TEST_CHECK(PduR_CanTpTxConfirmation_fake.arg1_val == E_OK);
+  //Zmienna stanu nie powinna się zmienic
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 0); //sprawdzenie czy ID sie nie zmieniclo
+  TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 0);
+  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 0);
+
+  CanTp_Reset_Rx_State_Variables();
+
 }
 
+void Test_Of_CanTp_FlowControlReception(void){
+  
+  PduIdType PduId = 0x01;
+  PduInfoType PduInfo;
+  uint8 SduDataPtr[8];
+  uint8 *MetaDataPtr;
+  PduInfo.MetaDataPtr = MetaDataPtr;
+  PduInfo.SduDataPtr = SduDataPtr;
+  Std_ReturnType ret; 
+
+  PduInfoType PduInfoPtr;
+  CanPCI_Type CanPCI;
+
+  PduLengthType availableDataPtr_array_local[10] = {1,2,3,4,5,6,7,8,9,0};
+  uint8 sdu_data_ptr_array[5][7] = { "marszal", "ek prog", "ramuje ","1234567", "1234567" };
+
+
+  PduLengthType availableData;
+  int i;
+
+  for( i = 0; i < 5; i++){
+      memcpy(PduR_CanTpCopyTxData_sdu_data[i], sdu_data_ptr_array[i], sizeof(uint8)*7);
+  }
+
+  PduR_CanTpCopyTxData_availableDataPtr = availableDataPtr_array_local;
+
+  RESET_FAKE( PduR_CanTpCopyTxData);
+  RESET_FAKE( CanIf_Transmit );
+  RESET_FAKE( PduR_CanTpTxConfirmation);
+
+  PduR_CanTpCopyTxData_fake.custom_fake = PduR_CanTpCopyTxData_FF;
+
+  Std_ReturnType CanIf_Transmit_retv[] = {E_OK, E_OK, E_NOT_OK, E_OK};
+  SET_RETURN_SEQ(CanIf_Transmit, CanIf_Transmit_retv, 4);
+
+  BufReq_ReturnType PduR_CanTpCopyTxData_retv[] = {BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_E_NOT_OK , BUFREQ_BUSY};
+  SET_RETURN_SEQ(PduR_CanTpCopyTxData, PduR_CanTpCopyTxData_retv, 5);
+
+  
+/*
+  TEST1: 
+  Sending normal CF 
+  all buffers are OK
+  CanIf transmit finished with success
+  Tx should stay at TX_PROCESSING
+*/
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
+  CanTp_Tx_StateVariables.blocks_to_fc = 0;
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+  CanTp_Tx_StateVariables.message_legth = 100;
+  CanTp_Tx_StateVariables.sent_bytes = 95;
+  CanTp_Tx_StateVariables.next_SN = 0;
+
+
+
+  //Ustawienie niezerowej zmiennej stanu
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+
+  CanPCI.frame_type = FC;
+  CanPCI.FS = FC_CTS;
+  CanPCI.BS = 1;
+  CanPCI.ST = DEFAULT_ST;
+
+  CanTp_FlowControlReception(1, &CanPCI);
+ 
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 1);
+
+  // sprawdzamy czy CanTpCopyData zostal wywolany z poprawnymi argumentami
+
+  //Sprawdzenie argumentów funckji CanTpCopyData
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.arg0_val == 1);
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.arg1_val->SduLength == 5);
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.arg2_val == NULL);
+ 
+  // sprawdzamy czy sen single frame wykonal sie poprawnie 
+
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1 ); // sprawdzamy czy can tp cos wyslal
+
+  TEST_CHECK(CanIf_Transmit_fake.arg0_val == 1 ); // sprawdzaym z jakimi argumentami funkcja wysylajaca zostala wykonana
+  TEST_CHECK(CanIf_Transmit_fake.arg1_val->SduDataPtr[0] == 0x20 );
+  TEST_CHECK(CanIf_Transmit_fake.arg1_val->SduDataPtr[1] == 'm' );
+  TEST_CHECK(CanIf_Transmit_fake.arg1_val->SduDataPtr[2] == 'a' );
+  TEST_CHECK(CanIf_Transmit_fake.arg1_val->SduDataPtr[3] == 'r' );
+  TEST_CHECK(CanIf_Transmit_fake.arg1_val->SduDataPtr[4] == 's' );
+  TEST_CHECK(CanIf_Transmit_fake.arg1_val->SduDataPtr[5] == 'z' );
+
+  TEST_CHECK(N_As_timer.state == TIMER_ACTIVE); // sprawdzamy czy timer dziala
+
+
+  //Zmienna stanu nie powinna się zmienic
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 1); //sprawdzenie czy ID sie nie zmieniclo
+  TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 100);
+  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 100);
+
+  CanTp_Reset_Rx_State_Variables();
+
+
+  /*
+  TEST 2
+  ramka flow control z argumentem OVFL
+
+*/
+
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
+  CanTp_Tx_StateVariables.blocks_to_fc = 0;
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+  CanTp_Tx_StateVariables.message_legth = 100;
+  CanTp_Tx_StateVariables.sent_bytes = 95;
+  CanTp_Tx_StateVariables.next_SN = 0;
+  //Ustawienie niezerowej zmiennej stanu
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+
+  CanPCI.frame_type = FC;
+  CanPCI.FS = FC_OVFLW;
+  CanPCI.BS = 0;
+  CanPCI.ST = DEFAULT_ST;
+
+  CanTp_FlowControlReception(1, &CanPCI);
+ 
+
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.call_count == 1 );
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.arg0_val == 1 );
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.arg1_val == E_NOT_OK );
+
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 1);
+
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1 ); // sprawdzamy czy can tp cos wyslal
+
+  TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE); // sprawdzamy czy timer dziala
+  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE); 
+
+  //Zmienna stanu nie powinna się zmienic
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 0); //sprawdzenie czy ID sie nie zmieniclo
+  TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 0);
+  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 0);
+
+  CanTp_Reset_Rx_State_Variables();
+
+
+  /*
+  TEST 3 - frame with FC_WAIT (UNFINISHED)
+
+  */
+
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
+  CanTp_Tx_StateVariables.blocks_to_fc = 0;
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+  CanTp_Tx_StateVariables.message_legth = 100;
+  CanTp_Tx_StateVariables.sent_bytes = 95;
+  CanTp_Tx_StateVariables.next_SN = 0;
+  //Ustawienie niezerowej zmiennej stanu
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+
+  CanPCI.frame_type = FC;
+  CanPCI.FS = FC_WAIT;
+  CanPCI.BS = 0;
+  CanPCI.ST = DEFAULT_ST;
+
+  CanTp_FlowControlReception(1, &CanPCI);
+ 
+
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.call_count == 1 );
+
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 1);
+
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1 ); // sprawdzamy czy can tp cos wyslal
+
+  TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE); 
+
+  //Zmienna stanu nie powinna się zmienic
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING_SUSPENDED);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 1); //sprawdzenie czy ID sie nie zmieniclo
+  TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 100);
+  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 95);
+
+  CanTp_Reset_Rx_State_Variables();
+
+  /*
+  TEST 3 - UNEXPECTED FRAME - should be ignored
+
+  */
+
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+  CanTp_Tx_StateVariables.blocks_to_fc = 0;
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+  CanTp_Tx_StateVariables.message_legth = 100;
+  CanTp_Tx_StateVariables.sent_bytes = 95;
+  CanTp_Tx_StateVariables.next_SN = 0;
+  //Ustawienie niezerowej zmiennej stanu
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+
+  CanPCI.frame_type = FC;
+  CanPCI.FS = FC_WAIT;
+  CanPCI.BS = 0;
+  CanPCI.ST = DEFAULT_ST;
+
+  CanTp_FlowControlReception(1, &CanPCI);
+ 
+
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.call_count == 1 );
+
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 1);
+
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1 ); // sprawdzamy czy can tp cos wyslal
+
+  TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE); 
+
+  //Zmienna stanu nie powinna się zmienic
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 1); //sprawdzenie czy ID sie nie zmieniclo
+  TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 100);
+  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 95);
+
+  CanTp_Reset_Rx_State_Variables();
+
+  /*
+  TEST 5 - frame with wrong ID
+
+  */
+
+
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
+  CanTp_Tx_StateVariables.blocks_to_fc = 0;
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+  CanTp_Tx_StateVariables.message_legth = 100;
+  CanTp_Tx_StateVariables.sent_bytes = 95;
+  CanTp_Tx_StateVariables.next_SN = 0;
+  //Ustawienie niezerowej zmiennej stanu
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+
+  CanPCI.frame_type = FC;
+  CanPCI.FS = FC_WAIT;
+  CanPCI.BS = 0;
+  CanPCI.ST = DEFAULT_ST;
+
+  CanTp_FlowControlReception(2, &CanPCI); // wrong ID - 2 but should be 1
+ 
+
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.call_count == 1 );
+
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 1);
+
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1 ); // sprawdzamy czy can tp cos wyslal
+
+  TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE); 
+
+  //Zmienna stanu nie powinna się zmienic
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING_SUSPENDED);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 1); //sprawdzenie czy ID sie nie zmieniclo
+  TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 100);
+  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 95);
+
+  CanTp_Reset_Rx_State_Variables();
+
+    /*
+  TEST 6 - frame with unknown frame type - IGNORED
+
+  */
+
+
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
+  CanTp_Tx_StateVariables.blocks_to_fc = 0;
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+  CanTp_Tx_StateVariables.message_legth = 100;
+  CanTp_Tx_StateVariables.sent_bytes = 95;
+  CanTp_Tx_StateVariables.next_SN = 0;
+  //Ustawienie niezerowej zmiennej stanu
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+
+  CanPCI.frame_type = FC;
+  CanPCI.FS = 5; // unknown type
+  CanPCI.BS = 0;
+  CanPCI.ST = DEFAULT_ST;
+
+  CanTp_FlowControlReception(1, &CanPCI); 
+ 
+
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.call_count == 1 );
+
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 1);
+
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1 ); // sprawdzamy czy can tp cos wyslal
+
+  TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE); 
+
+  //Zmienna stanu nie powinna się zmienic
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING_SUSPENDED);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 1); //sprawdzenie czy ID sie nie zmieniclo
+  TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 100);
+  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 95);
+
+  CanTp_Reset_Rx_State_Variables();
+}
 
 /*
   Lista testów - wpisz tutaj wszystkie funkcje które mają być wykonane jako testy.
@@ -2369,6 +2695,7 @@ TEST_LIST = {
     {"TestOf_CanTp_ResetTxStateVariables", TestOf_CanTp_ResetTxStateVariables},
     {"TestOf_CanTp_Transmit", TestOf_CanTp_Transmit},
     {"TestOf_CanTp_SendNextCF", TestOf_CanTp_SendNextCF},
+    {"Test_Of_CanTp_FlowControlReception", Test_Of_CanTp_FlowControlReception},
     //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
     { NULL, NULL }                                      /* To musi być na końcu */
 };

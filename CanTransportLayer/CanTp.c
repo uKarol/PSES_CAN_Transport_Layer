@@ -1018,6 +1018,8 @@ static void CanTp_SendNextCF(){
 
     if( CanTp_Tx_StateVariables.sent_bytes == CanTp_Tx_StateVariables.message_legth ){
         // cala wiadomosc zostala wyslana 
+        PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_OK);
+        CanTp_ResetTxStateVariables();
     }
     else{
         // wysylamy dalej 
@@ -1035,7 +1037,7 @@ static void CanTp_SendNextCF(){
                 CanTp_Tx_StateVariables.sent_bytes = CanTp_Tx_StateVariables.sent_bytes + bytes_to_send;
                 CanTp_Tx_StateVariables.blocks_to_fc--;
                 CanTp_Tx_StateVariables.next_SN = (CanTp_Tx_StateVariables.next_SN + 1)%7;
-                if(CanTp_Tx_StateVariables.blocks_to_fc == 0) CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
+                if((CanTp_Tx_StateVariables.blocks_to_fc == 0) && (CanTp_Tx_StateVariables.sent_bytes != CanTp_Tx_StateVariables.message_legth) )CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
                 else CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING;        
 
             }
@@ -1363,9 +1365,8 @@ static void CanTp_FlowControlReception(PduIdType RxPduId, CanPCI_Type *Can_PCI){
                 abort the transmit request and notify the upper layer by calling the callback 
                 function PduR_CanTpTxConfirmation() with the result E_NOT_OK. ⌋ ( )*/
 
+                PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_NOT_OK);
                 CanTp_ResetTxStateVariables();
-                PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.Cantp_TxState, E_NOT_OK);
-
             }
             else{
                 /* UNKNOWN/INVALID FS */ 
