@@ -296,12 +296,12 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
         }
     }
     else{
-        //TODO: Czy zwrócić E_NOT_OK?
-        //ret = E_NOT_OK;
-        /*
-        Na chwile obecna brak pewnosci 
-        ale raczej blad, tak wiec uwaga na razie nie ruszac  
-        */
+        /*[SWS_CanTp_00123] ⌈If the configured transmit connection channel is in use 
+        (state CANTP_TX_PROCESSING), the CanTp module shall reject new transmission 
+        requests linked to this channel. To reject a transmission, CanTp returns 
+        E_NOT_OK when the upper layer asks for a transmission with the 
+        CanTp_Transmit() function.⌋ (SRS_Can_01066) */
+        ret = E_NOT_OK;
     }
     return ret;
 }
@@ -514,17 +514,18 @@ void CanTp_TxConfirmation ( PduIdType TxPduId, Std_ReturnType result ){
    */
 
    // receiver  
-
-   if(result == E_OK){
-         CanTp_TimerReset(&N_Ar_timer);   
-   }    
-   else{
-       // w przypadku receivera tylko wysłanie FlowControl aktywuje ten timer, oznacza to, że nie powinien się on wysypać w stanie innym niż PROCESSING
-       if( (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING ) || (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED ) ){
-        PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
-        CanTp_Reset_Rx_State_Variables();
-       }
-   }
+    if( CanTp_StateVariables.CanTp_Current_RxId == TxPduId ){
+        if(result == E_OK){
+            CanTp_TimerReset(&N_Ar_timer);   
+        }    
+        else{
+            // w przypadku receivera tylko wysłanie FlowControl aktywuje ten timer, oznacza to, że nie powinien się on wysypać w stanie innym niż PROCESSING
+            if( (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING ) || (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED ) ){
+                PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                CanTp_Reset_Rx_State_Variables();
+            }
+        }
+    }
 
     // TRASMITER 
 
@@ -532,15 +533,27 @@ void CanTp_TxConfirmation ( PduIdType TxPduId, Std_ReturnType result ){
         W PRZYPADKU TRANSMITERA MAMY PEWNOSC ŻE RAMKA DOSZŁA (O ILE ZWRÓCIŁ OK ) I MOŻNA ŁADOWAĆ KOLEJNĄ 
 
     */
-
-    if(result == E_OK){
-        // jeżeli poprzednia ramka przeszła 
-        if(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING)
-        {
+    if( CanTp_Tx_StateVariables.CanTp_Current_TxId == TxPduId ){
+        if(result == E_OK){
+            // jeżeli poprzednia ramka przeszła 
+            if(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING)
+            {
                CanTp_SendNextCF();               
+            }
         }
+        else{
+            /*[SWS_CanTp_00355]⌈CanTp shall abort the corrensponding session, 
+            when CanTp_TxConfirmation() is called with the result E_NOT_OK.⌋()*/
+            PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_OK);
+            CanTp_ResetTxStateVariables();
 
+        }
     }
+    else{
+        // ignore unknown ID
+    }
+
+    // UNKNOWN ID WILL BE IGNORED
 
 }
 
@@ -1018,6 +1031,11 @@ static void CanTp_SendNextCF(){
 
     if( CanTp_Tx_StateVariables.sent_bytes == CanTp_Tx_StateVariables.message_legth ){
         // cala wiadomosc zostala wyslana 
+
+       /* [SWS_CanTp_00090] ⌈When the transport transmission session is 
+       successfully completed, the CanTp module shall call a notification 
+       service of the upper layer, PduR_CanTpTxConfirmation(), with the result E_OK. ⌋ ( )*/
+
         PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_OK);
         CanTp_ResetTxStateVariables();
     }
@@ -1370,6 +1388,12 @@ static void CanTp_FlowControlReception(PduIdType RxPduId, CanPCI_Type *Can_PCI){
             }
             else{
                 /* UNKNOWN/INVALID FS */ 
+                /*[SWS_CanTp_00317] ⌈If a FC frame is received with an invalid FS the 
+                CanTp module shall abort the transmission of this message and notify 
+                the upper layer by calling the callback function PduR_CanTpTxConfirmation()
+                 with the result E_NOT_OK. ⌋ ( )*/
+                PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_NOT_OK);
+                CanTp_ResetTxStateVariables();
             }
         }
         else{

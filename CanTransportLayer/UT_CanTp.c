@@ -2629,7 +2629,7 @@ void Test_Of_CanTp_FlowControlReception(void){
   CanTp_Reset_Rx_State_Variables();
 
     /*
-  TEST 6 - frame with unknown frame type - IGNORED
+  TEST 6 - frame with unknown frame type - ERRPR = transmit should be aborted
 
   */
 
@@ -2651,7 +2651,9 @@ void Test_Of_CanTp_FlowControlReception(void){
   CanTp_FlowControlReception(1, &CanPCI); 
  
 
-  TEST_CHECK( PduR_CanTpTxConfirmation_fake.call_count == 1 );
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.call_count == 2 );
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.arg0_val == 1 );
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.arg1_val == E_NOT_OK );
 
   //Funcja CanTpCopyTxData powinna zostac wywołana
   TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 1);
@@ -2663,11 +2665,11 @@ void Test_Of_CanTp_FlowControlReception(void){
   TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE); 
 
   //Zmienna stanu nie powinna się zmienic
-  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING_SUSPENDED);
-  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 1); //sprawdzenie czy ID sie nie zmieniclo
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 0); //sprawdzenie czy ID sie nie zmieniclo
   TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
-  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 100);
-  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 95);
+  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 0);
+  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 0);
 
   CanTp_Reset_Rx_State_Variables();
 }
