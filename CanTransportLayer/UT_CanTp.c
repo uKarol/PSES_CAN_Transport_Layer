@@ -574,11 +574,6 @@ void Test_Of_CanTp_PrepareSegmenetedFrame(void)
 
 void Test_Of_Main(){
 
-    /* 
-      dobra Panowie zdaję sobie sprawę ze ta część może być dość mocno popierdolona 
-      ale oczeuję od was że ogarniecie to po zobaczeniu tych kilku przykładów ;)
-      macie tutaj workflow
-    */
 
    // przypominam że funcja main używa funkcji z pdu routera, dla których musimy zrobić FF
    // zasadniczo interesuje nas funkcja PduR_CanTpCopyRxData
@@ -587,7 +582,8 @@ void Test_Of_Main(){
      RESET_FAKE(CanIf_Transmit);
       
     Std_ReturnType RetVal[10] = {E_OK, E_OK, E_OK, E_OK, E_OK, E_OK};
-    SET_RETURN_SEQ( CanIf_Transmit, RetVal, 10);
+    Std_ReturnType RetVal_transmit[10] = {E_OK, E_OK, E_NOT_OK, E_OK, E_OK, E_OK};
+    SET_RETURN_SEQ( CanIf_Transmit, RetVal_transmit, 10);
     PduLengthType buffSize_array_local[10] = {0,0,0,0,10,0,0,0,9,0};
     PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
 
@@ -733,9 +729,6 @@ void Test_Of_Main(){
 
 
 
-
-    // dobra, to teraz najbardziej przejebane czyli katowanie N_Br
-
   /*
     TEST CASE 4 
 
@@ -776,9 +769,6 @@ void Test_Of_Main(){
     TEST_CHECK(N_Cr_timer.counter == 0);
     TEST_CHECK(N_Cr_timer.state == TIMER_ACTIVE );
 
-    // //// N_Br powinien byc aktywowany, UPDATE:  Aktywowanie N_Cr zostało przeniesione w inne miejsce
-    // TEST_CHECK(N_Cr_timer.counter == 0);
-    // TEST_CHECK(N_Cr_timer.state == TIMER_ACTIVE );
 
   /*
     TEST CASE 6
@@ -902,6 +892,139 @@ void Test_Of_Main(){
     TEST_CHECK(N_Cr_timer.counter == 0);
     TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
     TEST_CHECK(FC_Wait_frame_ctr == 0);
+
+
+    /*
+    TEST CASE 8 
+    sprawdzamy działanie timera po wystapieniu timeouta 
+    wyslano rowniez maksymalna ilosc ramek fc wait
+    powinien wystapic blad
+    odbiranie ma zostac przerwane
+    */
+
+    // N_Br_timer.counter = 99;
+    // FC_Wait_frame_ctr = 0;
+
+    // // Niezerowa wartość sended_bytes do sprawdzenia, czy reciever jest resetowany (wszystki pola powiny zostać wyzerowane)
+    // CanTp_StateVariables.sended_bytes = 1;
+
+    // CanTp_MainFunction ();
+    // // copy data powinna byc wykonana 
+    // TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 8); 
+    // //  ilosc wywolan powinna zostac bez zmian  
+    // TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 3); 
+    //    // N_Br powinien zostać zresetowany
+    // TEST_CHECK(N_Br_timer.counter == 0);
+    // TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE );
+    // // N_Ar powinien byc nieruszony, bo zostal wczesniej zresetowany 
+    // TEST_CHECK(N_Ar_timer.counter == 0);
+    // TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+    // //// N_Cr powinien byc nieaktywny
+    // TEST_CHECK(N_Cr_timer.counter == 0);
+    // TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
+    // TEST_CHECK(FC_Wait_frame_ctr == 0);
+
+    // // Reciever powinien zostać zresetowany. 
+    // TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+
+
+
+// TESTS OF TX TIMERS
+
+// activate all tx timers and check status after callind main
+CanTp_Reset_Rx_State_Variables();
+CanTp_ResetTxStateVariables();
+
+
+CanTp_TimerStart(&N_Bs_timer);
+CanTp_TimerStart(&N_Cs_timer);
+CanTp_TimerStart(&N_As_timer);
+
+CanTp_MainFunction ();
+CanTp_MainFunction ();
+CanTp_MainFunction ();
+
+TEST_CHECK(N_As_timer.counter == 3);
+TEST_CHECK(N_As_timer.state == TIMER_ACTIVE );
+
+TEST_CHECK(N_Bs_timer.counter == 3);
+TEST_CHECK(N_Bs_timer.state == TIMER_ACTIVE );
+
+TEST_CHECK(N_Cs_timer.counter == 3);
+TEST_CHECK(N_Cs_timer.state == TIMER_ACTIVE );
+
+
+// TX TIMERS TIMEOUT OF AS
+
+CanTp_Reset_Rx_State_Variables();
+CanTp_ResetTxStateVariables();
+
+N_As_timer.counter = 99;
+
+CanTp_TimerStart(&N_As_timer);
+
+
+CanTp_MainFunction ();
+
+TEST_CHECK(N_As_timer.counter == 0);
+TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE );
+
+TEST_CHECK(N_Bs_timer.counter == 0);
+TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE );
+
+TEST_CHECK(N_Cs_timer.counter == 0);
+TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE );
+
+TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 1);
+
+// TX TIMERS TIMEOUT OF BS
+
+CanTp_Reset_Rx_State_Variables();
+CanTp_ResetTxStateVariables();
+
+N_Bs_timer.counter = 99;
+
+CanTp_TimerStart(&N_Bs_timer);
+
+
+CanTp_MainFunction ();
+
+TEST_CHECK(N_As_timer.counter == 0);
+TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE );
+
+TEST_CHECK(N_Bs_timer.counter == 0);
+TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE );
+
+TEST_CHECK(N_Cs_timer.counter == 0);
+TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE );
+
+TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 2);
+
+// TX TIMERS TIMEOUT OF CS
+
+CanTp_Reset_Rx_State_Variables();
+CanTp_ResetTxStateVariables();
+
+N_Cs_timer.counter = 99;
+
+CanTp_TimerStart(&N_Cs_timer);
+
+
+CanTp_MainFunction ();
+
+TEST_CHECK(N_As_timer.counter == 0);
+TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE );
+
+TEST_CHECK(N_Bs_timer.counter == 0);
+TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE );
+
+TEST_CHECK(N_Cs_timer.counter == 0);
+TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE );
+
+TEST_CHECK(PduR_CanTpTxConfirmation_fake.call_count == 3);
+
+
+
 
 }
 
@@ -1857,7 +1980,7 @@ void TestOf_CanTp_Transmit(void){
   PduInfo.MetaDataPtr = MetaDataPtr;
   PduInfo.SduDataPtr = SduDataPtr;
   Std_ReturnType ret; 
-  CanTp_State = CAN_TP_ON;
+ 
 
   PduLengthType availableDataPtr_array_local[10] = {1,2,3,4,5,6,7,8,9,0};
   uint8 sdu_data_ptr_array[4][7] = { "marszal", "ek prog", "ramuje ","1234567" };
@@ -1888,6 +2011,21 @@ void TestOf_CanTp_Transmit(void){
   BufReq_ReturnType PduR_CanTpCopyTxData_retv[] = {BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_BUSY, BUFREQ_OK};
   SET_RETURN_SEQ(PduR_CanTpCopyTxData, PduR_CanTpCopyTxData_retv, 4);
 
+  
+  // TEST 1 = CAN TP W STANIE OFF
+   CanTp_State = CAN_TP_OFF;
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+  PduInfo.SduLength = 7;
+  //Ustawienie niezerowej zmiennej środowiskowej
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 1;
+
+  ret = CanTp_Transmit(PduId, &PduInfo);
+  
+  TEST_CHECK( ret == E_NOT_OK );
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 1); //sprawdzenie czy ID sie nie zmieniclo
+ 
+ CanTp_State = CAN_TP_ON;
   
 /*
   TEST1: 
@@ -3191,8 +3329,227 @@ void Test_Of_CanTp_TxConfirmation(){
   CanTp_Reset_Rx_State_Variables();
   CanTp_ResetTxStateVariables();
 
+    /* 
+    TEST 10
+    CAN_TP_OFF
+  */
+  CanTp_State = CAN_TP_OFF;
+
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+  CanTp_Tx_StateVariables.blocks_to_fc = 1;
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+  CanTp_Tx_StateVariables.message_legth = 100;
+  CanTp_Tx_StateVariables.sent_bytes = 95;
+  CanTp_Tx_StateVariables.next_SN = 0;
+  CanTp_Tx_StateVariables.CanTp_Current_TxId = 2;
+
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+  CanTp_StateVariables.CanTp_Current_RxId = 1;
+
+  N_Ar_timer.state = TIMER_ACTIVE;
+
+
+  //Ustawienie niezerowej zmiennej stanu
+  
+
+  CanTp_TxConfirmation (1, E_NOT_OK );
+ 
+  //Funcja CanTpCopyTxData powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 1);
+  
+  TEST_CHECK( PduR_CanTpTxConfirmation_fake.call_count == 1 );
+
+  // sprawdzamy czy CanTpCopyData zostal wywolany z poprawnymi argumentami
+
+
+ 
+  // sprawdzamy czy sen single frame wykonal sie poprawnie 
+
+  TEST_CHECK(CanIf_Transmit_fake.call_count == 1 ); // sprawdzamy czy can tp cos wyslal
+
+  TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE); // sprawdzamy czy timer dziala
+  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE);
+  TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE);
+
+  //Zmienna stanu nie powinna się zmienic
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+  TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 2); //sprawdzenie czy ID sie nie zmieniclo
+  TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 1);
+  TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 100);
+  TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 95);
+
+
+  // n ar timer shuol be in reset state
+
+  TEST_CHECK(N_Ar_timer.state == TIMER_ACTIVE);
+
+
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING);
+
+  TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1);
+
+
+  CanTp_Reset_Rx_State_Variables();
+  CanTp_ResetTxStateVariables();
+
 }
 
+void Test_Of_CanTp_Init(void){
+    CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+    CanTp_Tx_StateVariables.blocks_to_fc = 1;
+    CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+    CanTp_Tx_StateVariables.message_legth = 100;
+    CanTp_Tx_StateVariables.sent_bytes = 95;
+    CanTp_Tx_StateVariables.next_SN = 0;
+    CanTp_Tx_StateVariables.CanTp_Current_TxId = 2;
+
+    CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING;
+    CanTp_StateVariables.blocks_to_next_cts = 1;
+    CanTp_StateVariables.CanTp_Current_RxId = 1;
+    CanTp_StateVariables.expected_CF_SN = 1;
+    CanTp_StateVariables.sended_bytes = 1;
+
+    CanTp_State = CAN_TP_OFF;
+  // shult reset all variables and set state to ON
+    CanTp_Init();
+    
+    TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+    TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 0); 
+    TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+    TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 0);
+    TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 0);
+
+    TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+    TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+    TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 0);
+    TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+    TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+
+    TEST_CHECK(CanTp_State == CAN_TP_ON);
+}
+
+void Test_Of_CanTp_Shutdown(void){
+    CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+    CanTp_Tx_StateVariables.blocks_to_fc = 1;
+    CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+    CanTp_Tx_StateVariables.message_legth = 100;
+    CanTp_Tx_StateVariables.sent_bytes = 95;
+    CanTp_Tx_StateVariables.next_SN = 0;
+    CanTp_Tx_StateVariables.CanTp_Current_TxId = 2;
+
+    CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING;
+    CanTp_StateVariables.blocks_to_next_cts = 1;
+    CanTp_StateVariables.CanTp_Current_RxId = 1;
+    CanTp_StateVariables.expected_CF_SN = 1;
+    CanTp_StateVariables.sended_bytes = 1;
+
+    CanTp_State = CAN_TP_ON;
+    // shult reset all variables and set state to OFF
+    CanTp_Shutdown();
+    
+    TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+    TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 0); 
+    TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+    TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 0);
+    TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 0);
+
+    TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+    TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+    TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 0);
+    TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+    TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+
+    TEST_CHECK(CanTp_State == CAN_TP_OFF);
+}
+
+void Test_Of_CanTp_CancelTransmit(void){
+
+  /*
+    TEST 1 
+
+    Correct_Id - ret E_OK
+
+  */
+    Std_ReturnType ret;
+    
+    CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+    CanTp_Tx_StateVariables.blocks_to_fc = 1;
+    CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+    CanTp_Tx_StateVariables.message_legth = 100;
+    CanTp_Tx_StateVariables.sent_bytes = 95;
+    CanTp_Tx_StateVariables.next_SN = 0;
+
+    ret = CanTp_CancelTransmit ( 0x1 );
+
+   TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+    TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 0); 
+    TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 0);
+    TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 0);
+    TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 0);
+    TEST_CHECK( ret == E_OK );
+
+/*
+  TEST 2
+  wrong id - relut E_NOT_OK
+
+*/
+
+    CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_WAIT;
+    CanTp_Tx_StateVariables.blocks_to_fc = 1;
+    CanTp_Tx_StateVariables.CanTp_Current_TxId = 0x1;
+    CanTp_Tx_StateVariables.message_legth = 100;
+    CanTp_Tx_StateVariables.sent_bytes = 95;
+    CanTp_Tx_StateVariables.next_SN = 0;
+
+    ret = CanTp_CancelTransmit ( 0 );
+
+   TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+    TEST_CHECK(CanTp_Tx_StateVariables.CanTp_Current_TxId == 0x1); 
+    TEST_CHECK(CanTp_Tx_StateVariables.blocks_to_fc == 1);
+    TEST_CHECK(CanTp_Tx_StateVariables.message_legth == 100);
+    TEST_CHECK(CanTp_Tx_StateVariables.sent_bytes == 95);
+    TEST_CHECK( ret == E_NOT_OK );
+
+}
+
+void Test_Of_CanTp_CancelReceive(void){
+
+    Std_ReturnType ret;
+
+    /* TEST 1 - ID OK */
+
+    CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING;
+    CanTp_StateVariables.blocks_to_next_cts = 1;
+    CanTp_StateVariables.CanTp_Current_RxId = 1;
+    CanTp_StateVariables.expected_CF_SN = 1;
+    CanTp_StateVariables.sended_bytes = 1;
+
+    ret = CanTp_CancelReceive ( 1 );
+
+    TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
+    TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 0);
+    TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 0);
+    TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 0);
+    TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+    TEST_CHECK( ret == E_OK );
+
+    /* TEST 2 - WRONG_ID */
+    CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+    CanTp_StateVariables.blocks_to_next_cts = 1;
+    CanTp_StateVariables.CanTp_Current_RxId = 1;
+    CanTp_StateVariables.expected_CF_SN = 1;
+    CanTp_StateVariables.sended_bytes = 1;
+
+    ret = CanTp_CancelReceive ( 0 );
+
+    TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING);
+    TEST_CHECK(CanTp_StateVariables.blocks_to_next_cts == 1);
+    TEST_CHECK(CanTp_StateVariables.CanTp_Current_RxId == 1);
+    TEST_CHECK(CanTp_StateVariables.expected_CF_SN == 1);
+    TEST_CHECK(CanTp_StateVariables.sended_bytes == 1);
+    TEST_CHECK( ret == E_NOT_OK );
+
+}
 
 
 /*
@@ -3220,6 +3577,10 @@ TEST_LIST = {
     {"TestOf_CanTp_SendNextCF", TestOf_CanTp_SendNextCF},
     {"Test_Of_CanTp_FlowControlReception", Test_Of_CanTp_FlowControlReception},
     {"Test_Of_CanTp_TxConfirmation",Test_Of_CanTp_TxConfirmation},
+    {"Test_Of_CanTp_Init", Test_Of_CanTp_Init},
+    {" Test_Of_CanTp_Shutdown",  Test_Of_CanTp_Shutdown},
+    {" Test_Of_CanTp_CancelTransmit",  Test_Of_CanTp_CancelTransmit},
+    {" Test_Of_CanTp_CancelReceive", Test_Of_CanTp_CancelReceive},
     //{ "Test_Of_PduR_CanTpStartOfReception" , Test_Of_PduR_CanTpStartOfReception},
     { NULL, NULL }                                      /* To musi być na końcu */
 };

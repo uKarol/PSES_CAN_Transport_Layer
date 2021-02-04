@@ -32,7 +32,7 @@ typedef struct {
 /*====================================================================================================================*\
     Deklaracje funkcji globalnych
 \*====================================================================================================================*/
-void CanTp_Init ( const CanTp_ConfigType* CfgPtr );
+void CanTp_Init ( void );
 
 void CanTp_GetVersionInfo ( Std_VersionInfoType* versioninfo );
 

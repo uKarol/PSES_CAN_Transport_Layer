@@ -179,7 +179,7 @@ static void CanTp_SendNextCF();
   This function initializes the CanTp module.  
 
   Parameters (in) 
-        CfgPtr - Pointer to the CanTp post-build configuration data.
+       
 
   Parameters (inout): None
 
@@ -188,7 +188,7 @@ static void CanTp_SendNextCF();
   Return value None
 
 */
-void CanTp_Init ( const CanTp_ConfigType* CfgPtr ){
+void CanTp_Init ( void ){
 
 /* Reset all state variables and change state to can tp on */
     CanTp_Reset_Rx_State_Variables();
@@ -282,11 +282,6 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
                     ret = E_OK;
                 }
                 else{
-                    //TODO: Obsługa błedu funkcji SendFirstFrame 
-                    /*  Przrwać transmisję: 
-                    CanTp_ResetTxStateVariables();  
-                    PduR_CanTpTxConfirmation(TxPduId, E_NOT_OK);
-                    Czy wystarczy tylko zwrócić E_NOT_OK?  */ 
                     ret = E_NOT_OK;
                 }
             }
