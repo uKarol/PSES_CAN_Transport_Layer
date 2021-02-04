@@ -188,25 +188,15 @@ static void CanTp_SendNextCF();
   Return value None
 
 */
-void CanTp_Init ( const CanTp_ConfigType* CfgPtr );
+void CanTp_Init ( const CanTp_ConfigType* CfgPtr ){
 
+/* Reset all state variables and change state to can tp on */
+    CanTp_Reset_Rx_State_Variables();
+    CanTp_ResetTxStateVariables();
+    CanTp_State = CAN_TP_ON;
 
-/**
-  @brief CanTp_ GetVersionInfo
+}
 
-  This function returns the version information of the CanTp module. 
-
-  Parameters (in) 
-        versioninfo - Indicator as to where to store the version information of this module.
-
-  Parameters (inout): None
-
-  Parameters (out): None
-
-  Return value None
-
-*/
-void CanTp_GetVersionInfo ( Std_VersionInfoType* versioninfo );
 
 /**
   @brief CanTp_Shutdown
@@ -222,7 +212,14 @@ void CanTp_GetVersionInfo ( Std_VersionInfoType* versioninfo );
   Return value None
 
 */
-void CanTp_Shutdown ( void );
+void CanTp_Shutdown ( void ){
+
+    /* Reset all state variables and change state to can tp on */
+    CanTp_Reset_Rx_State_Variables();
+    CanTp_ResetTxStateVariables();
+    CanTp_State = CAN_TP_OFF;
+
+}
 
 /**
   @brief CanTp_Transmit
@@ -253,54 +250,58 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
     Temp_Pdu.SduDataPtr = payload;
     Temp_Pdu.MetaDataPtr = NULL;
     
+    if( CanTp_State == CAN_TP_ON ){
 
-    if( CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT){
-        if(PduInfoPtr->SduLength < 8){
-            //Send signle frame
-            Temp_Pdu.SduLength = PduInfoPtr->SduLength;
-            BufReq_State = PduR_CanTpCopyTxData(TxPduId, &Temp_Pdu, NULL, &Pdu_Len);
-            if(BufReq_State == BUFREQ_OK){
-
-               ret = CanTp_SendSingleFrame(TxPduId, Temp_Pdu.SduDataPtr, PduInfoPtr->SduLength );
-
+        if( CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT){
+            if(PduInfoPtr->SduLength < 8){
+                //Send signle frame
+                Temp_Pdu.SduLength = PduInfoPtr->SduLength;
+                BufReq_State = PduR_CanTpCopyTxData(TxPduId, &Temp_Pdu, NULL, &Pdu_Len);
+                if(BufReq_State == BUFREQ_OK){
+                    ret = CanTp_SendSingleFrame(TxPduId, Temp_Pdu.SduDataPtr, PduInfoPtr->SduLength );
+                }
+                else if(BufReq_State == BUFREQ_E_NOT_OK){
+                    CanTp_ResetTxStateVariables();  
+                    PduR_CanTpTxConfirmation(TxPduId, E_NOT_OK);
+                    ret = E_NOT_OK;
+                }
+                else {
+                    //Start N_Cs timer
+                    CanTp_TimerStart(&N_Cs_timer);
+                    ret = E_OK;
+                }
             }
-            else if(BufReq_State == BUFREQ_E_NOT_OK){
-                CanTp_ResetTxStateVariables();  
-                PduR_CanTpTxConfirmation(TxPduId, E_NOT_OK);
-                ret = E_NOT_OK;
-            }
-            else {
-                //Start N_Cs timer
-                CanTp_TimerStart(&N_Cs_timer);
-                ret = E_OK;
+            else{
+                //Send First Frame
+                if(CanTp_SendFirstFrame(TxPduId, PduInfoPtr->SduLength) == E_OK){
+                    //Transmiter przechodzi w stan Processing_suspended
+                    CanTp_Tx_StateVariables.Cantp_TxState = TxPduId;
+                    CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
+                    CanTp_Tx_StateVariables.message_legth = PduInfoPtr->SduLength;
+                    CanTp_Tx_StateVariables.sent_bytes = 0;
+                    ret = E_OK;
+                }
+                else{
+                    //TODO: Obsługa błedu funkcji SendFirstFrame 
+                    /*  Przrwać transmisję: 
+                    CanTp_ResetTxStateVariables();  
+                    PduR_CanTpTxConfirmation(TxPduId, E_NOT_OK);
+                    Czy wystarczy tylko zwrócić E_NOT_OK?  */ 
+                    ret = E_NOT_OK;
+                }
             }
         }
         else{
-            //Send First Frame
-            if(CanTp_SendFirstFrame(TxPduId, PduInfoPtr->SduLength) == E_OK){
-                //Transmiter przechodzi w stan Processing_suspended
-                CanTp_Tx_StateVariables.Cantp_TxState = TxPduId;
-                CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
-                CanTp_Tx_StateVariables.message_legth = PduInfoPtr->SduLength;
-                CanTp_Tx_StateVariables.sent_bytes = 0;
-                ret = E_OK;
-            }
-            else{
-                //TODO: Obsługa błedu funkcji SendFirstFrame 
-                /*  Przrwać transmisję: 
-                CanTp_ResetTxStateVariables();  
-                PduR_CanTpTxConfirmation(TxPduId, E_NOT_OK);
-                 Czy wystarczy tylko zwrócić E_NOT_OK?  */ 
-                ret = E_NOT_OK;
-            }
+            /*[SWS_CanTp_00123] ⌈If the configured transmit connection channel is in use 
+            (state CANTP_TX_PROCESSING), the CanTp module shall reject new transmission 
+            requests linked to this channel. To reject a transmission, CanTp returns 
+            E_NOT_OK when the upper layer asks for a transmission with the 
+            CanTp_Transmit() function.⌋ (SRS_Can_01066) */
+            ret = E_NOT_OK;
         }
-    }
-    else{
-        /*[SWS_CanTp_00123] ⌈If the configured transmit connection channel is in use 
-        (state CANTP_TX_PROCESSING), the CanTp module shall reject new transmission 
-        requests linked to this channel. To reject a transmission, CanTp returns 
-        E_NOT_OK when the upper layer asks for a transmission with the 
-        CanTp_Transmit() function.⌋ (SRS_Can_01066) */
+    
+    }   
+    else{ 
         ret = E_NOT_OK;
     }
     return ret;
@@ -322,7 +323,19 @@ Std_ReturnType CanTp_Transmit ( PduIdType TxPduId, const PduInfoType* PduInfoPtr
     E_NOT_OK: Cancellation was rejected by the destination module.
 
 */
-Std_ReturnType CanTp_CancelTransmit ( PduIdType TxPduId );
+Std_ReturnType CanTp_CancelTransmit ( PduIdType TxPduId ){
+
+    Std_ReturnType ret;             
+    if(CanTp_Tx_StateVariables.CanTp_Current_TxId == TxPduId ){
+        PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_NOT_OK);
+        CanTp_ResetTxStateVariables();
+        ret = E_OK;
+    }
+    else{
+        ret = E_NOT_OK;
+    }
+    return ret;
+}
 
 /**
   @brief CanTp_CancelReceive
@@ -339,13 +352,18 @@ Requests cancellation of an ongoing reception of a PDU in a lower layer transpor
     E_NOT_OK: Cancellation was rejected by the destination module.
 
 */
-Std_ReturnType CanTp_CancelReceive ( PduIdType RxPduId );
-
-Std_ReturnType CanTp_ChangeParameter ( PduIdType id, TPParameterType parameter, uint16 value );
-
-Std_ReturnType CanTp_ReadParameter ( PduIdType id, TPParameterType parameter, uint16* value );
-
-
+Std_ReturnType CanTp_CancelReceive ( PduIdType RxPduId ){
+    Std_ReturnType ret;             
+    if( CanTp_StateVariables.CanTp_Current_RxId == RxPduId ){
+        PduR_CanTpRxIndication (CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+        CanTp_Reset_Rx_State_Variables();
+        ret = E_OK;
+    }
+    else{
+        ret = E_NOT_OK;
+    }
+    return ret;
+}
 
 
 void CanTp_MainFunction ( void ){
@@ -408,6 +426,11 @@ void CanTp_MainFunction ( void ){
     CanTp_TimerTick(&N_Br_timer);
     CanTp_TimerTick(&N_Cr_timer);
 
+    CanTp_TimerTick(&N_As_timer);
+    CanTp_TimerTick(&N_Bs_timer);
+    CanTp_TimerTick(&N_Cs_timer);
+
+
 
    if(N_Br_timer.state == TIMER_ACTIVE){
 
@@ -450,10 +473,11 @@ void CanTp_MainFunction ( void ){
                 if(FC_Wait_frame_ctr >= FC_WAIT_FRAME_CTR_MAX){
                     // [SWS_CanTp_00223]
 // 2- reset recievera  --Zbyt duza ilość ramek FC_WAIT, 
-                    CanTp_Reset_Rx_State_Variables();
+                    
                     PduR_CanTpRxIndication (CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                    CanTp_Reset_Rx_State_Variables();
                     //Zresetowanie Timera N_Br:
-                    CanTp_TimerReset(&N_Br_timer); 
+                    
                     FC_Wait_frame_ctr = 0;
                 }
                 else{
@@ -473,13 +497,11 @@ void CanTp_MainFunction ( void ){
        if(CanTp_TimerTimeout(&N_Cr_timer) == E_NOT_OK){
 
 // 2- reset recievera  --Zbyt duza ilość ramek FC_WAIT, 
-            CanTp_Reset_Rx_State_Variables();
+            
             // [SWS_CanTp_00223]
             PduR_CanTpRxIndication(CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+            CanTp_Reset_Rx_State_Variables();
 
-            // [SWS_CanTp_00313] 
-            //Zatrzymanie i zresetowanie licznika
-            CanTp_TimerReset(&N_Cr_timer);
        }
    }
 
@@ -488,16 +510,63 @@ void CanTp_MainFunction ( void ){
        //N_Ar zgłasza timeout 
        if(CanTp_TimerTimeout(&N_Ar_timer) == E_NOT_OK){
 
-// 2- reset recievera  --Zbyt duza ilość ramek FC_WAIT, 
-            CanTp_Reset_Rx_State_Variables();
+// 2- reset recievera  --Zbyt duza ilość ramek FC_WAIT,             
             // [SWS_CanTp_00223]
             PduR_CanTpRxIndication(CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+            CanTp_Reset_Rx_State_Variables();
 
-            // [SWS_CanTp_00313] 
-            //Zatrzymanie i zresetowanie licznika
-            CanTp_TimerReset(&N_Ar_timer);
        }
    }
+/*[SWS_CanTp_00167] ⌈After a transmission request from upper layer, 
+the CanTp module shall start time-out N_Cs before the call of PduR_CanTpCopyTxData.
+If no data is available before the timer elapsed, the CanTp module shall abort the 
+communication. ⌋ ( ) */
+
+    if(N_Cs_timer.state == TIMER_ACTIVE){
+       //N_Ar zgłasza timeout 
+       if(CanTp_TimerTimeout(&N_Cs_timer) == E_NOT_OK){
+
+// 2- timeout - brak odpowiedzi od drivera 
+            
+            // [SWS_CanTp_00223]
+            PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_NOT_OK);
+            CanTp_ResetTxStateVariables();
+
+       }
+   }
+/*[SWS_CanTp_00310] ⌈In case of N_As timeout occurrence (no confirmation from CAN driver) 
+the CanTp module shall notify the upper layer by calling the callback function 
+PduR_CanTpTxConfirmation() with the result E_NOT_OK. ⌋ ( ) */
+
+    if(N_As_timer.state == TIMER_ACTIVE){
+       //N_Ar zgłasza timeout 
+       if(CanTp_TimerTimeout(&N_As_timer) == E_NOT_OK){
+
+// 2- timeout - brak odpowiedzi od drivera 
+            
+            // [SWS_CanTp_00223]
+            PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_NOT_OK);
+            CanTp_ResetTxStateVariables();
+
+       }
+   }
+
+/*[SWS_CanTp_00316] ⌈In case of N_Bs timeout occurrence the CanTp module shall 
+abort transmission of this message and notify the upper layer by calling the 
+callback function PduR_CanTpTxConfirmation() with the result E_NOT_OK. ⌋ ( )*/
+    if(N_Bs_timer.state == TIMER_ACTIVE){
+       //N_Ar zgłasza timeout 
+       if(CanTp_TimerTimeout(&N_Bs_timer) == E_NOT_OK){
+
+// 2- timeout - brak odpowiedzi od drivera 
+            
+            // [SWS_CanTp_00223]
+            PduR_CanTpTxConfirmation(CanTp_Tx_StateVariables.CanTp_Current_TxId, E_NOT_OK);
+            CanTp_ResetTxStateVariables();
+
+       }
+   }
+
 } 
 
 // callbacks
@@ -512,7 +581,7 @@ void CanTp_TxConfirmation ( PduIdType TxPduId, Std_ReturnType result ){
         w przypadku receivera funkcja powinna zatrzymać timer N_Ar, o ile nie będzie błędu
 
    */
-
+if( CanTp_State == CAN_TP_ON ){
    // receiver  
     if( CanTp_StateVariables.CanTp_Current_RxId == TxPduId ){
         if( (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING ) || (CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED ) ){
@@ -559,7 +628,7 @@ void CanTp_TxConfirmation ( PduIdType TxPduId, Std_ReturnType result ){
     else{
         // ignore unknown ID
     }
-
+}
     // UNKNOWN ID WILL BE IGNORED
 
 }
@@ -570,49 +639,49 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
     PduInfoType Extracted_Data;     // Payload extracted from PDU
     uint8 temp_data[8];             // array for temp payload
 
-
-    if( CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT){
+    if( CanTp_State == CAN_TP_ON ){
+        if( CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT){
         
-      //  CanTp_StateVariables.CanTp_Current_RxId = RxPduId; // setting of segmented frame id possible only in waiting state
+        //  CanTp_StateVariables.CanTp_Current_RxId = RxPduId; // setting of segmented frame id possible only in waiting state
 
-        CanTp_GetPCI( PduInfoPtr, &Can_PCI );
+            CanTp_GetPCI( PduInfoPtr, &Can_PCI );
 
         /* transmisja danych jeszcze nie wystartowała 
            pierwsza ramka musi być SF albo FF, w przeciwnym wypadku
             wiadomość zostanie zignorowana
         */
 
-        if( Can_PCI.frame_type == FF ){
-            CanTp_FirstFrameReception(RxPduId, PduInfoPtr, &Can_PCI);
-        }
-        else if( Can_PCI.frame_type == SF ){
-            CanTp_SingleFrameReception(RxPduId, &Can_PCI, PduInfoPtr);           
-        } 
-        else if( Can_PCI.frame_type == FC ){
+            if( Can_PCI.frame_type == FF ){
+                CanTp_FirstFrameReception(RxPduId, PduInfoPtr, &Can_PCI);
+            }
+            else if( Can_PCI.frame_type == SF ){
+                CanTp_SingleFrameReception(RxPduId, &Can_PCI, PduInfoPtr);           
+            } 
+            else if( Can_PCI.frame_type == FC ){
             /* accept flow control if Tranmitter is waiting for it
              */
-            CanTp_FlowControlReception(RxPduId, &Can_PCI);
-        }
-        else
-        {
+                CanTp_FlowControlReception(RxPduId, &Can_PCI);
+            }
+            else
+            {
             // in this state, CanTP expect only SF or FF, FC other frames shuld vbe ignored
-            CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT; 
-        } 
-    }
+                CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT; 
+            } 
+        }
 
-    else if( CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING){
+        else if( CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING){
         /*
             in this state process only CF and FC, 
             FF and CF cause abort communication and start a new one
         */
-       CanTp_GetPCI( PduInfoPtr, &Can_PCI );
-       // EXPECTED
-       if( Can_PCI.frame_type == CF ){
-           CanTp_ConsecutiveFrameReception(RxPduId, &Can_PCI, PduInfoPtr);
-       }
-       else if( Can_PCI.frame_type == FC ){
-           CanTp_FlowControlReception(RxPduId, &Can_PCI);
-       }
+             CanTp_GetPCI( PduInfoPtr, &Can_PCI );
+            // EXPECTED
+             if( Can_PCI.frame_type == CF ){
+                CanTp_ConsecutiveFrameReception(RxPduId, &Can_PCI, PduInfoPtr);
+            }
+            else if( Can_PCI.frame_type == FC ){
+                CanTp_FlowControlReception(RxPduId, &Can_PCI);
+            }
        // UNEXPECTED 
         /*
             [SWS_CanTp_00057] ⌈If unexpected frames are received, the CanTp module shall
@@ -621,36 +690,36 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
 
         */
 
-       else if( Can_PCI.frame_type == FF ) {            
+            else if( Can_PCI.frame_type == FF ) {            
             /*
                Table 1: Handling of N-PDU arrivals
                 Terminate the current reception, report an indication, with parameter 
                 Result set to E_NOT_OK, to the upper layer, 
                 and process the FF N-PDU as the start of a new reception
             */
-            PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
-            CanTp_Reset_Rx_State_Variables();
-            CanTp_FirstFrameReception(RxPduId, PduInfoPtr, &Can_PCI);
+                PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                CanTp_Reset_Rx_State_Variables();
+                CanTp_FirstFrameReception(RxPduId, PduInfoPtr, &Can_PCI);
 
-       }
-       else if( Can_PCI.frame_type == SF ) {            
+            }
+            else if( Can_PCI.frame_type == SF ) {            
             /*
                 Terminate the current reception, report an indication, 
                 with parameter Result set to E_NOT_OK, to the upper layer, 
                 and process the SF N-PDU as the start of a new reception
             */
-            PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
-            CanTp_Reset_Rx_State_Variables();
-            CanTp_SingleFrameReception(RxPduId, &Can_PCI, PduInfoPtr);
+                PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                CanTp_Reset_Rx_State_Variables();
+                CanTp_SingleFrameReception(RxPduId, &Can_PCI, PduInfoPtr);
 
-       }
-       else{
+            }
+            else{
            /*
                 UNKNOWN FRAME SHOULD BE IGNORED
            */
 
-       }
-    }
+            }
+        }
 
     /* uwaga na razie nie jestem pewny czy ten stan ma sens, mozliwe ze zostanie skasowany
         jest to stan w ktorym CanTp czeka aż zwolni się bufor 
@@ -659,43 +728,44 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
         nie jest jasne jak zachowac sie na wypadek bledu (niestety)
     */
 
-    else if( CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED){    
+        else if( CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED){    
 
-        CanTp_GetPCI( PduInfoPtr, &Can_PCI );
+            CanTp_GetPCI( PduInfoPtr, &Can_PCI );
 
-        if( Can_PCI.frame_type == FC ){
-            CanTp_FlowControlReception(RxPduId, &Can_PCI);
-       }
+            if( Can_PCI.frame_type == FC ){
+                CanTp_FlowControlReception(RxPduId, &Can_PCI);
+            }
 
-        else if( Can_PCI.frame_type == FF ) {            
+            else if( Can_PCI.frame_type == FF ) {            
             /*
                Table 1: Handling of N-PDU arrivals
                 Terminate the current reception, report an indication, with parameter 
                 Result set to E_NOT_OK, to the upper layer, 
                 and process the FF N-PDU as the start of a new reception
             */
-            PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
-            CanTp_Reset_Rx_State_Variables();
-            CanTp_FirstFrameReception(RxPduId, PduInfoPtr, &Can_PCI);
+                PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                CanTp_Reset_Rx_State_Variables();
+                CanTp_FirstFrameReception(RxPduId, PduInfoPtr, &Can_PCI);
 
-       }
-       else if( Can_PCI.frame_type == SF ) {            
+            }
+            else if( Can_PCI.frame_type == SF ) {            
             /*
                 Terminate the current reception, report an indication, 
                 with parameter Result set to E_NOT_OK, to the upper layer, 
                 and process the SF N-PDU as the start of a new reception
             */
-            PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
-            CanTp_Reset_Rx_State_Variables();
-            CanTp_SingleFrameReception(RxPduId, &Can_PCI, PduInfoPtr);
+                PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                CanTp_Reset_Rx_State_Variables();
+                CanTp_SingleFrameReception(RxPduId, &Can_PCI, PduInfoPtr);
 
-       }
+            }
 
-       else {
-           // uwaga na razie niejasne 
-           PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
-           CanTp_Reset_Rx_State_Variables();
-       }
+            else {
+                // uwaga na razie niejasne 
+                PduR_CanTpRxIndication ( CanTp_StateVariables.CanTp_Current_RxId, E_NOT_OK);
+                CanTp_Reset_Rx_State_Variables();
+            }
+        }
     }
 }
 
@@ -913,6 +983,11 @@ static Std_ReturnType CanTp_SendFlowControl( PduIdType ID, uint8 BlockSize, Flow
             PduR_CanTpRxIndication(ID, E_NOT_OK);
         }
         else{
+
+    /*[SWS_CanTp_00312] ⌈The CanTp module shall start a time-out N_Cr at each indication of 
+    CF reception (except the last one in a block) and at each confirmation of a FC 
+    transmission that initiate a CF transmission on the sender side (FC with FS=CTS). ⌋ ( )*/
+
             CanTp_TimerStart(&N_Ar_timer);
             if(FC_Status == FC_CTS){
                 CanTp_TimerStart(&N_Cr_timer);
@@ -1061,7 +1136,7 @@ static void CanTp_SendNextCF(){
             if( ret == E_OK ){
                 CanTp_Tx_StateVariables.sent_bytes = CanTp_Tx_StateVariables.sent_bytes + bytes_to_send;
                 CanTp_Tx_StateVariables.blocks_to_fc--;
-                CanTp_Tx_StateVariables.next_SN = (CanTp_Tx_StateVariables.next_SN + 1)%7;
+                CanTp_Tx_StateVariables.next_SN = (CanTp_Tx_StateVariables.next_SN + 1)%8;
                 if((CanTp_Tx_StateVariables.blocks_to_fc == 0) && (CanTp_Tx_StateVariables.sent_bytes != CanTp_Tx_StateVariables.message_legth) )CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
                 else CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING;        
 
@@ -1112,6 +1187,7 @@ static Std_ReturnType CanTp_SendConsecutiveFrame(PduIdType id, uint8 SN, uint8* 
     if(CanIf_Transmit(id , &PduInfo) == E_OK ){
         //Startowanie timera N_As
         CanTp_TimerStart(&N_As_timer);
+        CanTp_TimerStart(&N_Bs_timer);
     }
     else{
         /*
@@ -1382,6 +1458,9 @@ static void CanTp_FlowControlReception(PduIdType RxPduId, CanPCI_Type *Can_PCI){
             }   
             else if( Can_PCI->FS == FC_WAIT ){
                 /* only reset timer */
+                CanTp_TimerReset(&N_Bs_timer);
+                CanTp_TimerStart(&N_Bs_timer);
+
             }
             else if( Can_PCI->FS == FC_OVFLW){
                 /*ABORT TRANSMSSION */ 

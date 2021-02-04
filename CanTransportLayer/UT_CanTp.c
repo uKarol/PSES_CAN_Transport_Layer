@@ -919,7 +919,7 @@ void Test_Of_CanTp_RxIndication_SF(void){
   CanPCI_Type CanPCI;
 
 // configure FF
-
+  CanTp_State = CAN_TP_ON;
   RESET_FAKE(PduR_CanTpStartOfReception);
   RESET_FAKE(PduR_CanTpCopyRxData); 
   RESET_FAKE(PduR_CanTpRxIndication);
@@ -1141,7 +1141,7 @@ void Test_Of_CanTp_RxIndication_FF(void){
 
   PduInfoType PduInfoPtr;
   CanPCI_Type CanPCI;
-
+  CanTp_State = CAN_TP_ON;
 // configure FF
   RESET_FAKE(PduR_CanTpRxIndication);
   RESET_FAKE(PduR_CanTpStartOfReception);
@@ -1314,7 +1314,7 @@ void Test_Of_CanTp_RxIndication_CF(void){
 
   PduInfoType PduInfoPtr;
   CanPCI_Type CanPCI;
-
+  CanTp_State = CAN_TP_ON;
 // configure FF
   RESET_FAKE(PduR_CanTpRxIndication);
   RESET_FAKE(PduR_CanTpCopyRxData); 
@@ -1857,7 +1857,7 @@ void TestOf_CanTp_Transmit(void){
   PduInfo.MetaDataPtr = MetaDataPtr;
   PduInfo.SduDataPtr = SduDataPtr;
   Std_ReturnType ret; 
-
+  CanTp_State = CAN_TP_ON;
 
   PduLengthType availableDataPtr_array_local[10] = {1,2,3,4,5,6,7,8,9,0};
   uint8 sdu_data_ptr_array[4][7] = { "marszal", "ek prog", "ramuje ","1234567" };
@@ -2531,7 +2531,7 @@ void Test_Of_CanTp_FlowControlReception(void){
   TEST_CHECK(CanIf_Transmit_fake.call_count == 1 ); // sprawdzamy czy can tp cos wyslal
 
   TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE); 
-  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Bs_timer.state == TIMER_ACTIVE); 
   TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE); 
 
   //Zmienna stanu nie powinna się zmienic
@@ -2573,7 +2573,7 @@ void Test_Of_CanTp_FlowControlReception(void){
   TEST_CHECK(CanIf_Transmit_fake.call_count == 1 ); // sprawdzamy czy can tp cos wyslal
 
   TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE); 
-  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Bs_timer.state == TIMER_ACTIVE); 
   TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE); 
 
   //Zmienna stanu nie powinna się zmienic
@@ -2616,7 +2616,7 @@ void Test_Of_CanTp_FlowControlReception(void){
   TEST_CHECK(CanIf_Transmit_fake.call_count == 1 ); // sprawdzamy czy can tp cos wyslal
 
   TEST_CHECK(N_As_timer.state == TIMER_NOT_ACTIVE); 
-  TEST_CHECK(N_Bs_timer.state == TIMER_NOT_ACTIVE); 
+  TEST_CHECK(N_Bs_timer.state == TIMER_ACTIVE); 
   TEST_CHECK(N_Cs_timer.state == TIMER_NOT_ACTIVE); 
 
   //Zmienna stanu nie powinna się zmienic
@@ -2710,7 +2710,7 @@ void Test_Of_CanTp_TxConfirmation(){
   BufReq_ReturnType PduR_CanTpCopyTxData_retv[] = {BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_E_NOT_OK , BUFREQ_BUSY};
   SET_RETURN_SEQ(PduR_CanTpCopyTxData, PduR_CanTpCopyTxData_retv, 5);
 
-  
+  CanTp_State = CAN_TP_ON;
 /*
   TEST1: 
   wszystko idzie ok
