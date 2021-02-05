@@ -582,14 +582,14 @@ void Test_Of_Main(){
      RESET_FAKE(CanIf_Transmit);
       
     Std_ReturnType RetVal[10] = {E_OK, E_OK, E_OK, E_OK, E_OK, E_OK};
-    Std_ReturnType RetVal_transmit[10] = {E_OK, E_OK, E_NOT_OK, E_OK, E_OK, E_OK};
+    Std_ReturnType RetVal_transmit[10] = {E_OK, E_OK, E_NOT_OK, E_NOT_OK, E_OK, E_OK};
     SET_RETURN_SEQ( CanIf_Transmit, RetVal_transmit, 10);
-    PduLengthType buffSize_array_local[10] = {0,0,0,0,10,0,0,0,9,0};
+    PduLengthType buffSize_array_local[11] = {0,0,0,0,10,0,0,0,9,0, 10};
     PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
 
     // teraz pora przygotowac wartosci zwrocone przez te funkcje
-    BufReq_ReturnType BufferReturnVals[10] = { BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OVFL, BUFREQ_E_NOT_OK, BUFREQ_E_NOT_OK};
-    SET_RETURN_SEQ(PduR_CanTpCopyRxData, BufferReturnVals, 10);
+    BufReq_ReturnType BufferReturnVals[11] = { BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK, BUFREQ_OVFL, BUFREQ_E_NOT_OK, BUFREQ_OK, BUFREQ_OK};
+    SET_RETURN_SEQ(PduR_CanTpCopyRxData, BufferReturnVals, 11);
     PduR_CanTpCopyRxData_fake.custom_fake = PduR_CanTpCopyRxData_FF;
 
 
@@ -896,38 +896,54 @@ void Test_Of_Main(){
 
     /*
     TEST CASE 8 
-    sprawdzamy działanie timera po wystapieniu timeouta 
-    wyslano rowniez maksymalna ilosc ramek fc wait
-    powinien wystapic blad
-    odbiranie ma zostac przerwane
+    WYSLANIE FLOW CONTROL WAIT ZAKONCZONE NIEPOWODZENIEM
     */
+    N_Br_timer.state = TIMER_ACTIVE; 
+    N_Br_timer.counter = 99;
+    FC_Wait_frame_ctr = 0;
 
-    // N_Br_timer.counter = 99;
-    // FC_Wait_frame_ctr = 0;
+    // Niezerowa wartość sended_bytes do sprawdzenia, czy reciever jest resetowany (wszystki pola powiny zostać wyzerowane)
+    CanTp_StateVariables.sended_bytes = 1;
 
-    // // Niezerowa wartość sended_bytes do sprawdzenia, czy reciever jest resetowany (wszystki pola powiny zostać wyzerowane)
-    // CanTp_StateVariables.sended_bytes = 1;
-
-    // CanTp_MainFunction ();
+    CanTp_MainFunction ();
     // // copy data powinna byc wykonana 
-    // TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 8); 
-    // //  ilosc wywolan powinna zostac bez zmian  
-    // TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 3); 
+     TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 10); 
+     TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 5); 
     //    // N_Br powinien zostać zresetowany
-    // TEST_CHECK(N_Br_timer.counter == 0);
-    // TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE );
+     TEST_CHECK(N_Br_timer.counter == 0);
+     TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE );
     // // N_Ar powinien byc nieruszony, bo zostal wczesniej zresetowany 
-    // TEST_CHECK(N_Ar_timer.counter == 0);
-    // TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+     TEST_CHECK(N_Ar_timer.counter == 0);
+     TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
     // //// N_Cr powinien byc nieaktywny
-    // TEST_CHECK(N_Cr_timer.counter == 0);
-    // TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
-    // TEST_CHECK(FC_Wait_frame_ctr == 0);
+     TEST_CHECK(N_Cr_timer.counter == 0);
+     TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
+     TEST_CHECK(FC_Wait_frame_ctr == 1);
 
     // // Reciever powinien zostać zresetowany. 
     // TEST_CHECK(CanTp_StateVariables.sended_bytes == 0);
+    N_Br_timer.state = TIMER_ACTIVE; 
+    N_Br_timer.counter = 90;
+    FC_Wait_frame_ctr = 0;
 
+    // Niezerowa wartość sended_bytes do sprawdzenia, czy reciever jest resetowany (wszystki pola powiny zostać wyzerowane)
+    CanTp_StateVariables.sended_bytes = 1;
 
+    CanTp_MainFunction ();
+
+        // // copy data powinna byc wykonana 
+     TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count ==11 ); 
+     TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 6); 
+    //    // N_Br powinien zostać zresetowany
+     TEST_CHECK(N_Br_timer.counter == 0);
+     TEST_CHECK(N_Br_timer.state == TIMER_NOT_ACTIVE );
+    // // N_Ar powinien byc nieruszony, bo zostal wczesniej zresetowany 
+     TEST_CHECK(N_Ar_timer.counter == 0);
+     TEST_CHECK(N_Ar_timer.state == TIMER_NOT_ACTIVE );
+    // //// N_Cr powinien byc nieaktywny
+     TEST_CHECK(N_Cr_timer.counter == 0);
+     TEST_CHECK(N_Cr_timer.state == TIMER_NOT_ACTIVE );
+     TEST_CHECK(FC_Wait_frame_ctr == 0);
 
 // TESTS OF TX TIMERS
 
@@ -3551,7 +3567,153 @@ void Test_Of_CanTp_CancelReceive(void){
 
 }
 
+void Test_Of_CanTp_RxIndication_FC(void){
 
+// declare test variables
+  int i;
+  PduIdType  RxPduId = 1;
+
+  PduInfoType PduInfoPtr;
+  CanPCI_Type CanPCI;
+
+// configure FF
+  CanTp_State = CAN_TP_ON;
+  RESET_FAKE(PduR_CanTpStartOfReception);
+  RESET_FAKE(PduR_CanTpCopyRxData); 
+  RESET_FAKE(PduR_CanTpRxIndication);
+
+
+  RESET_FAKE(CanIf_Transmit);
+      
+  Std_ReturnType RetVal[10] = {E_OK, E_OK, E_OK, E_OK, E_OK, E_OK};
+  SET_RETURN_SEQ( CanIf_Transmit, RetVal, 10);
+
+// PDU Router FF
+  PduLengthType buffSize_array_local[10] = {7,1,7,7,7,7,7,7,9,0};
+  PduR_CanTpStartOfReception_buffSize_array = buffSize_array_local;
+  PduR_CanTpCopyRxData_buffSize_array = buffSize_array_local;
+
+    
+  BufReq_ReturnType PduR_CanTpStartOfReception_ReturnVals[10] = { BUFREQ_OK, BUFREQ_OK, BUFREQ_OVFL, BUFREQ_OK, BUFREQ_OK, BUFREQ_OK}; 
+  BufReq_ReturnType PduR_CanTpCopyRxData_ReturnVals[10] =       { BUFREQ_OK, BUFREQ_E_NOT_OK, BUFREQ_OK, BUFREQ_OK}; 
+  SET_RETURN_SEQ(PduR_CanTpStartOfReception, PduR_CanTpStartOfReception_ReturnVals, 6);
+  PduR_CanTpStartOfReception_fake.custom_fake =  PduR_CanTpStartOfReception_FF;
+
+  SET_RETURN_SEQ(PduR_CanTpCopyRxData, PduR_CanTpCopyRxData_ReturnVals, 4);
+  PduR_CanTpCopyRxData_fake.custom_fake = PduR_CanTpCopyRxData_FF;
+
+// set CanTp internal variables
+
+// testujemy scenariusz ze strony 62
+/*
+
+  TEST CASE 1
+
+  Reception of FLOW CONTROL when wait
+
+*/
+
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
+
+  CanPCI.frame_type = FC;
+  CanPCI.FS = FC_WAIT;
+  CanPCI.BS = 0;
+  CanPCI.ST = DEFAULT_ST;
+  uint8 payload[8] = "kasztan"; 
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+
+  /*TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
+
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduLength == 7);
+
+  //TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[i] == payload[i]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
+  
+
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
+  TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 1); // this funtions shulod be called
+  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1); // this functio shlud be called
+  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 1);
+  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_OK);
+*/
+
+/*
+
+  TEST CASE 2
+
+  Reception of FLOW CONTROL when processing suspended
+*/
+
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+
+  CanPCI.frame_type = FC;
+  CanPCI.FS = FC_WAIT;
+  CanPCI.BS = 0;
+  CanPCI.ST = DEFAULT_ST;
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+
+/*
+
+  TEST CASE 3
+
+Reception of FLOW CONTROL when processing suspended
+
+*/
+
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED;
+
+  CanPCI.frame_type = FC;
+  CanPCI.FS = FC_WAIT;
+  CanPCI.BS = 0;
+  CanPCI.ST = DEFAULT_ST;
+
+  CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+
+
+
+  /*
+    TEST CASE 4 
+    INVALID FRAME RECEPTION
+  */
+   CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
+
+  CanTp_RxIndication (RxPduId, NULL );
+
+  /*
+    TEST CASE 5 
+    INVALID FRAME RECEPTION
+  */
+   CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
+
+  CanTp_RxIndication (RxPduId, NULL );
+
+    /*
+    TEST CASE 6 
+    INVALID FRAME RECEPTION
+  */
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED;
+  CanTp_RxIndication (RxPduId, NULL );
+
+  /*
+    TEST CASE 7 
+    RECEPTION OF FRAME WHEN TP IF OFF
+  */
+ CanTp_State = CAN_TP_OFF;
+  CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED;
+  CanTp_RxIndication (RxPduId, NULL );
+
+}
 /*
   Lista testów - wpisz tutaj wszystkie funkcje które mają być wykonane jako testy.
 */
@@ -3568,6 +3730,7 @@ TEST_LIST = {
     { "Test_Of_CanTp_Reset_Rx_State_Variables", Test_Of_CanTp_Reset_Rx_State_Variables},
     { "Test_Of_CanTp_RxIndication_SF", Test_Of_CanTp_RxIndication_SF},
     { "Test_Of_CanTp_RxIndication_FF", Test_Of_CanTp_RxIndication_FF},
+    {"Test_Of_CanTp_RxIndication_FC", Test_Of_CanTp_RxIndication_FC},
     { "Test_Of_CanTp_SendSingleFrame", Test_Of_CanTp_SendSingleFrame},
     { "Test_Of_CanTp_ConsecutiveFrame", Test_Of_CanTp_SendConsecutiveFrame},
     { "Test_Of_CanTp_FirstFrame", Test_Of_CanTp_SendFirstFrame},
