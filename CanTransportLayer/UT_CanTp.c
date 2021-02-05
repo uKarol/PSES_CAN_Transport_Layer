@@ -2165,6 +2165,17 @@ void TestOf_CanTp_Transmit(void){
   TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 3);
   //Trasniter powinien ppozostać w stanie CANTP_TX_WAIT
   TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_WAIT);
+
+// TEST 6 - TX w stanie processing
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING;
+  PduInfo.SduLength = 1000;
+  ret = CanTp_Transmit(PduId, &PduInfo);
+  //Zwrócona wartość powinna wynosic E_OK
+  TEST_CHECK(ret == E_NOT_OK);
+  //Funcja CanTpCopyTxData nie powinna zostac wywołana
+  TEST_CHECK(PduR_CanTpCopyTxData_fake.call_count == 3);
+  //Trasniter powinien ppozostać w stanie CANTP_TX_WAIT
+  TEST_CHECK(CanTp_Tx_StateVariables.Cantp_TxState == CANTP_TX_PROCESSING);
 }
 
 // TODO Test funkcji CanTp_Transmit
@@ -3614,6 +3625,7 @@ void Test_Of_CanTp_RxIndication_FC(void){
 */
 
   CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
+  CanTp_Tx_StateVariables.Cantp_TxState = CANTP_TX_PROCESSING_SUSPENDED;
 
   CanPCI.frame_type = FC;
   CanPCI.FS = FC_WAIT;
@@ -3624,26 +3636,9 @@ void Test_Of_CanTp_RxIndication_FC(void){
   CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
   CanTp_RxIndication (RxPduId, &PduInfoPtr );
 
-  /*TEST_CHECK(PduR_CanTpStartOfReception_fake.arg2_val == 7); // sprawdz argumenty
+  TEST_CHECK(N_Bs_timer.counter == 0);
 
-  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduLength == 7);
 
-  //TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[i] == payload[i]);
-  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[0] == payload[0]);
-  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[1] == payload[1]);
-  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[2] == payload[2]);
-  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[3] == payload[3]);
-  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[4] == payload[4]);
-  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[5] == payload[5]);
-  TEST_CHECK(PduR_CanTpCopyRxData_fake.arg1_val->SduDataPtr[6] == payload[6]);
-  
-
-  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT); // calling function with this argument shouldnt change internal state
-  TEST_CHECK(PduR_CanTpStartOfReception_fake.call_count == 1); // this funtions shulod be called
-  TEST_CHECK(PduR_CanTpCopyRxData_fake.call_count == 1); // this functio shlud be called
-  TEST_CHECK(PduR_CanTpRxIndication_fake.call_count == 1);
-  TEST_CHECK(PduR_CanTpRxIndication_fake.arg1_val == E_OK);
-*/
 
 /*
 
@@ -3661,6 +3656,7 @@ void Test_Of_CanTp_RxIndication_FC(void){
 
   CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
   CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  TEST_CHECK(N_Bs_timer.counter == 0);
 
 /*
 
@@ -3680,6 +3676,7 @@ Reception of FLOW CONTROL when processing suspended
   CanTp_PrepareSegmenetedFrame(&CanPCI, &PduInfoPtr, payload); // ta funkcja była wczesniej przetestowana to wolna nam jej uzyc
   CanTp_RxIndication (RxPduId, &PduInfoPtr );
 
+  TEST_CHECK(N_Bs_timer.counter == 0);
 
 
   /*
@@ -3689,14 +3686,19 @@ Reception of FLOW CONTROL when processing suspended
    CanTp_StateVariables.CanTp_RxState = CANTP_RX_WAIT;
 
   CanTp_RxIndication (RxPduId, NULL );
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_WAIT);
 
   /*
     TEST CASE 5 
     INVALID FRAME RECEPTION
   */
+  PduInfoPtr.SduDataPtr= payload;
+  PduInfoPtr.SduDataPtr[0] = 0xFF;
+  PduInfoPtr.SduDataPtr[1] = 0xFF;
    CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING;
 
-  CanTp_RxIndication (RxPduId, NULL );
+  CanTp_RxIndication (RxPduId, &PduInfoPtr );
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING);
 
     /*
     TEST CASE 6 
@@ -3704,14 +3706,16 @@ Reception of FLOW CONTROL when processing suspended
   */
   CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED;
   CanTp_RxIndication (RxPduId, NULL );
-
+TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED);
   /*
     TEST CASE 7 
     RECEPTION OF FRAME WHEN TP IF OFF
   */
- CanTp_State = CAN_TP_OFF;
+  CanTp_State = CAN_TP_OFF;
   CanTp_StateVariables.CanTp_RxState = CANTP_RX_PROCESSING_SUSPENDED;
   CanTp_RxIndication (RxPduId, NULL );
+  TEST_CHECK( CanTp_State == CAN_TP_OFF);
+  TEST_CHECK(CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED);
 
 }
 /*

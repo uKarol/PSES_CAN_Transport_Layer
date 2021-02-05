@@ -716,14 +716,8 @@ void CanTp_RxIndication ( PduIdType RxPduId, const PduInfoType* PduInfoPtr ){
             }
         }
 
-    /* uwaga na razie nie jestem pewny czy ten stan ma sens, mozliwe ze zostanie skasowany
-        jest to stan w ktorym CanTp czeka aż zwolni się bufor 
-        zasadniczo nie powinny przychodzić wtedy żadne ramki z wyjątkie flow control 
-        nadejscie jakiejkolwiek innej ramki traktowane jest jako blad, ale uwaga 
-        nie jest jasne jak zachowac sie na wypadek bledu (niestety)
-    */
-
-        else if( CanTp_StateVariables.CanTp_RxState == CANTP_RX_PROCESSING_SUSPENDED){    
+        /* STAN PROCESSING SUSPENDED*/
+        else {    
 
             CanTp_GetPCI( PduInfoPtr, &Can_PCI );
 
@@ -809,6 +803,7 @@ static Std_ReturnType CanTp_GetPCI( const PduInfoType* can_data, CanPCI_Type* Ca
             break;
 
             default:
+                CanFrameInfo->frame_type = UNKNOWN;
                 ret = E_NOT_OK;
             break;
         }
@@ -938,7 +933,7 @@ static Std_ReturnType CanTp_SendFlowControl( PduIdType ID, uint8 BlockSize, Flow
 
         -funkcja przyjmuje BlockSize
         -FC_Status
-        -Separation Time (na razie nieistotna wartosc)
+        -Separation Time
 
         Funkcja ma za zadanie poskladać ramkę przy użyciu 
         CanTp_PrepareSegmenetedFrame
